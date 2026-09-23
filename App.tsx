@@ -101,7 +101,7 @@ const App: React.FC = () => {
         root.classList.add(effectiveTheme);
 
         if (metaThemeColor) {
-            const hexColor = effectiveTheme === 'dark' ? '#0F1210' : '#FAF9F6';
+            const hexColor = effectiveTheme === 'dark' ? '#0F1210' : '#F7F3F0';
             metaThemeColor.setAttribute('content', hexColor);
         }
     };

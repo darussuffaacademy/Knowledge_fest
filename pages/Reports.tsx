@@ -105,7 +105,7 @@ const ReportsPage: React.FC = () => {
   const getStyles = () => `
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Roboto+Slab:wght@400;500;600;700;800&display=swap');
-      :root { --primary: #1F2B1B; --secondary: #6A7B45; --text-primary: #2C3628; --text-muted: #6D7568; --border: #E0E2D9; --table-header: #F4F6F0; --brand-green: #283E25; --accent-gold: #D4AF37; }
+      :root { --primary: #C21D2E; --secondary: #12A89D; --text-primary: #2C3628; --text-muted: #6D7568; --border: #E0E2D9; --table-header: #F7F3F0; --brand-green: #00A652; --accent-gold: #F9B344; }
       h1, h2, h3, h4, h5, h6 { font-family: 'Roboto Slab', serif; color: var(--primary) !important; }
       table, tr, td, p, li, div, span, a { color: var(--text-primary); font-family: 'Plus Jakarta Sans', sans-serif; }
       table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 13px; border: 1px solid var(--border); table-layout: fixed; }
@@ -136,7 +136,7 @@ const ReportsPage: React.FC = () => {
 
       .item-row { margin-bottom: 4px; display: flex; gap: 6px; align-items: flex-start; }
       .item-num { font-weight: 900; font-size: 0.85em; opacity: 0.6; padding-top: 1px; }
-      .section-divider { border-top: 4px double #1F2B1B; margin: 40px 0; padding-top: 20px; }
+      .section-divider { border-top: 4px double #C21D2E; margin: 40px 0; padding-top: 20px; }
     </style>
   `;
 
@@ -185,7 +185,7 @@ const ReportsPage: React.FC = () => {
     // Priority: typographyUrlLight -> typographyUrl -> null
     const logoUrl = state?.settings.branding?.typographyUrlLight || state?.settings.branding?.typographyUrl;
     return `
-    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-family: 'Roboto Slab', serif; font-weight: 900; color: #1F2B1B; opacity: 0.04; pointer-events: none; z-index: 9999; white-space: nowrap; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 30px;" class="watermark-layer">
+    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-family: 'Roboto Slab', serif; font-weight: 900; color: #C21D2E; opacity: 0.04; pointer-events: none; z-index: 9999; white-space: nowrap; user-select: none; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 30px;" class="watermark-layer">
         ${logoUrl ? `<img src="${logoUrl}" style="max-width: 700px; width: 60vw; height: auto; object-fit: contain; filter: grayscale(100%);" />` : ''}
         <div style="font-size: 7vw; line-height: 1; text-transform: uppercase; letter-spacing: 0.2em;">${text}</div>
     </div>
@@ -197,7 +197,7 @@ const ReportsPage: React.FC = () => {
   const generateParticipantProfiles = (paginated: boolean) => {
     if (!state) return;
     const itemTypeFilter = globalFilters.itemType || [];
-    const profileStyles = ` <style> .profile-wrapper { page-break-inside: avoid; margin-bottom: 2rem; border: 2px solid #1F2B1B; border-radius: 12px; padding: 1.5rem; background: #FFFFFF; position: relative; overflow: hidden; z-index: 1; } .profile-header { text-align: center; border-bottom: 1px solid #E0E2D9; padding-bottom: 1rem; margin-bottom: 1rem; } .profile-name { font-family: 'Roboto Slab', serif; font-size: 1.75rem; font-weight: 700; color: #1F2B1B; margin: 0; text-transform: uppercase; } .profile-chest { font-family: 'Roboto Slab', serif; font-size: 1.5rem; font-weight: 800; color: #6A7B45; margin-top: 5px; } .profile-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 1rem; } </style> `;
+    const profileStyles = ` <style> .profile-wrapper { page-break-inside: avoid; margin-bottom: 2rem; border: 2px solid #C21D2E; border-radius: 12px; padding: 1.5rem; background: #FFFFFF; position: relative; overflow: hidden; z-index: 1; } .profile-header { text-align: center; border-bottom: 1px solid #E0E2D9; padding-bottom: 1rem; margin-bottom: 1rem; } .profile-name { font-family: 'Roboto Slab', serif; font-size: 1.75rem; font-weight: 700; color: #C21D2E; margin: 0; text-transform: uppercase; } .profile-chest { font-family: 'Roboto Slab', serif; font-size: 1.5rem; font-weight: 800; color: #12A89D; margin-top: 5px; } .profile-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 1rem; } </style> `;
     let html = `${getStyles()}${profileStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Participant Profiles')}`;
     filteredParticipants.forEach((p, index) => {
       const team = getTeamName(p.teamId); const category = getCategoryName(p.categoryId);
@@ -223,7 +223,7 @@ const ReportsPage: React.FC = () => {
         .id-grid { display: flex; flex-wrap: wrap; gap: 25px; justify-content: center; z-index: 1; position: relative; padding: 20px; }
         .id-card { 
             width: 320px; 
-            border: 2px solid #1F2B1B; 
+            border: 2px solid #C21D2E; 
             border-radius: 16px; 
             background: #fff; 
             box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); 
@@ -232,13 +232,13 @@ const ReportsPage: React.FC = () => {
             margin-bottom: 15px; 
             position: relative;
         }
-        .id-top-bar { height: 8px; background: #1F2B1B; }
+        .id-top-bar { height: 8px; background: #C21D2E; }
         .id-header { padding: 18px; border-bottom: 1px solid #f1f5f9; text-align: center; background: #fafafa; }
         .id-chest { 
             font-family: 'Roboto Slab', serif; 
             font-size: 1.8rem; 
             font-weight: 900; 
-            color: #1F2B1B; 
+            color: #C21D2E; 
             letter-spacing: -1px;
             line-height: 1;
             margin-bottom: 6px;
@@ -248,7 +248,7 @@ const ReportsPage: React.FC = () => {
             font-size: 1rem; 
             font-weight: 800; 
             text-transform: uppercase; 
-            color: #1F2B1B;
+            color: #C21D2E;
             line-height: 1.2;
         }
         .id-meta { font-size: 0.75rem; color: #666; font-weight: 600; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -260,7 +260,7 @@ const ReportsPage: React.FC = () => {
             font-weight: 900; 
             text-transform: uppercase; 
             letter-spacing: 1.5px; 
-            color: #6A7B45; 
+            color: #12A89D; 
             border-bottom: 1px solid #E0E2D9;
             padding-bottom: 4px;
             margin-bottom: 8px;
@@ -283,7 +283,7 @@ const ReportsPage: React.FC = () => {
         }
         .id-footer { 
             padding: 10px; 
-            background: #1F2B1B; 
+            background: #C21D2E; 
             color: white !important; 
             text-align: center; 
             font-size: 9px; 
@@ -423,7 +423,7 @@ const ReportsPage: React.FC = () => {
     state.categories.forEach(cat => {
         const items = state.items.filter(i => i.categoryId === cat.id && (itemTypeFilter.length === 0 || itemTypeFilter.some(t => t.toLowerCase() === (i.type || '').toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name));
         if (items.length === 0) return;
-        html += ` <div class="page-break-before-always"> <h3>${cat.name}</h3> ${items.map(item => ` <div class="item-card"> <h4>${item.name}</h4> <p style="font-size:12px;color:#666">${item.description || 'Event description.'}</p> <div> <span class="badge" style="background:#6A7B45;color:white">${item.type}</span> <span class="badge">${item.performanceType}</span> <span class="badge">🕒 ${item.duration} MIN</span> </div> </div> `).join('')} </div> `;
+        html += ` <div class="page-break-before-always"> <h3>${cat.name}</h3> ${items.map(item => ` <div class="item-card"> <h4>${item.name}</h4> <p style="font-size:12px;color:#666">${item.description || 'Event description.'}</p> <div> <span class="badge" style="background:#12A89D;color:white">${item.type}</span> <span class="badge">${item.performanceType}</span> <span class="badge">🕒 ${item.duration} MIN</span> </div> </div> `).join('')} </div> `;
     });
     setReportContent({ title: 'Program Manual', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };

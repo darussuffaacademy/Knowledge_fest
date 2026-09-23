@@ -132,7 +132,7 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
                             ) : (
                                 <button 
                                     onClick={onTitleClick} 
-                                    className="p-2 rounded-xl bg-[#283618]/5 dark:bg-white/5 text-[#283618] dark:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-2 border border-[#283618]/10"
+                                    className="p-2 rounded-xl bg-[#C21D2E]/5 dark:bg-white/5 text-[#C21D2E] dark:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-2 border border-[#C21D2E]/10"
                                     title="Return to Landing Page"
                                 >
                                     <ArrowLeft size={16} />

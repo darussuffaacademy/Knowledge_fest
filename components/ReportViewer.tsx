@@ -216,7 +216,7 @@ const ReportViewer: React.FC<ReportViewerProps> = ({ isOpen, onClose, title, con
                 gap: 12px;
             }
             .print-btn {
-                background-color: #283E25; 
+                background-color: #C21D2E; 
                 color: white;
                 border: none;
                 padding: 10px 20px;
@@ -231,16 +231,16 @@ const ReportViewer: React.FC<ReportViewerProps> = ({ isOpen, onClose, title, con
                 align-items: center;
                 gap: 8px;
             }
-            .print-btn:hover { background-color: #1a2e18; }
+            .print-btn:hover { background-color: #a81726; }
             .print-btn.back-btn { background-color: #f4f4f5; color: #18181b; border: 1px solid #e4e4e7; }
             .print-btn.back-btn:hover { background-color: #e4e4e7; }
-            h1, h2, h3, h4, h5, h6 { font-family: 'Roboto Slab', serif; color: #283E25; }
+            h1, h2, h3, h4, h5, h6 { font-family: 'Roboto Slab', serif; color: #C21D2E; }
             .report-container { max-width: 100%; margin: 0 auto; }
             .sort-indicator { display: none !important; } 
             .no-wrap { white-space: nowrap; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; border: 1px solid #e5e7eb; }
             th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
-            th { background-color: #F4F6F0 !important; color: #1F2B1B !important; font-weight: 700; font-family: 'Roboto Slab', serif; letter-spacing: 0.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            th { background-color: #F7F3F0 !important; color: #C21D2E !important; font-weight: 700; font-family: 'Roboto Slab', serif; letter-spacing: 0.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             tr:nth-child(even) { background-color: #FBFBFA !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             
             ${hideHeader ? '.enhanced-branding-header { display: none !important; }' : ''}

@@ -9,7 +9,7 @@
     
     <!-- PWA Manifest and Theme Color -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#FAF9F6" />
+    <meta name="theme-color" content="#F7F3F0" />
     <meta name="description" content="The official management terminal for the Amazio Knowledge Fest 2026 Edition." />
 
     <!-- Apple PWA tags -->
@@ -49,11 +49,12 @@
               amazio: {
                 bg: '#09090b', 
                 surface: '#121215',
-                'light-bg': '#FAF9F6', 
+                'light-bg': '#F7F3F0', 
                 'light-surface': '#FFFFFF',
-                primary: '#283618',
-                secondary: '#606C38',
-                accent: '#9AAD59',
+                primary: '#C21D2E',
+                secondary: '#12A89D',
+                accent: '#F9B344',
+                emerald: '#00A652',
               },
             },
             fontFamily: {
@@ -72,7 +73,7 @@
     <style type="text/css">
       .preload, .preload * { transition: none !important; }
       :root {
-        --bg-color: #FAF9F6;
+        --bg-color: #F7F3F0;
       }
       body {
         -webkit-font-smoothing: antialiased;
@@ -97,24 +98,6 @@
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       }
     </style>
-    <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.548.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
-    "jszip": "https://aistudiocdn.com/jszip@^3.10.1/dist/jszip.min.js",
-    "html2canvas": "https://aistudiocdn.com/html2canvas@^1.4.1/dist/html2canvas.min.js",
-    "firebase/": "https://esm.sh/firebase@^12.7.0/"
-  }
-}
-</script>
   </head>
   <body class="bg-amazio-light-bg dark:bg-amazio-bg text-zinc-900 dark:text-zinc-100 transition-colors duration-500">
     <div id="root"></div>

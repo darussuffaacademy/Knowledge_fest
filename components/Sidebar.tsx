@@ -113,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => setActiveTab(TABS.LANDING)}
                 className="relative flex items-center justify-center cursor-pointer group"
             >
-                <div className={`bg-gradient-to-br from-[#283618] to-[#606C38] dark:from-emerald-500 dark:to-teal-800 rounded-2xl flex items-center justify-center font-serif font-black text-white shadow-xl group-hover:rotate-12 transition-all duration-500 ${isNavCollapsed ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-xl'}`}>
+                <div className={`bg-gradient-to-br from-[#C21D2E] to-[#12A89D] dark:from-emerald-500 dark:to-teal-800 rounded-2xl flex items-center justify-center font-serif font-black text-white shadow-xl group-hover:rotate-12 transition-all duration-500 ${isNavCollapsed ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-xl'}`}>
                     A
                 </div>
                 {isExpanded && !isStickyMode && (
@@ -224,7 +224,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ${isExpanded && !isStickyMode ? 'p-3' : 'p-1.5 flex-col justify-center gap-2'}
             `}>
                 <div className={`
-                    shrink-0 rounded-full bg-gradient-to-tr from-[#283618] to-amazio-accent p-[1.5px] transition-all duration-500
+                    shrink-0 rounded-full bg-gradient-to-tr from-[#C21D2E] to-amazio-accent p-[1.5px] transition-all duration-500
                     ${isExpanded && !isStickyMode ? 'w-10 h-10' : 'w-8 h-8'}
                 `}>
                     <div className="w-full h-full rounded-full bg-white dark:bg-[#0F1210] flex items-center justify-center font-black text-xs text-amazio-primary dark:text-amazio-accent uppercase">

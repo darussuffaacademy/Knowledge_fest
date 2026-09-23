@@ -80,7 +80,7 @@ const PosterCanvas: React.FC<{
     return (
         <div 
             id={id}
-            className={`relative flex flex-col overflow-hidden bg-[#E3EBD1] text-[#283618] studio-canvas-root`}
+            className={`relative flex flex-col overflow-hidden bg-[#F7F3F0] text-[#C21D2E] studio-canvas-root`}
             style={{ 
                 width: '1080px', 
                 height: '1080px', 
@@ -100,12 +100,12 @@ const PosterCanvas: React.FC<{
                 <div className="mt-[232px] ml-[82px] space-y-0">
                     <div className="flex items-center gap-3">
                          <h2 className="text-[108px] font-black tracking-tighter leading-[0.9]" style={textStyle}>
-                            <span className="text-[#283618]">{prefix}</span>
-                            {suffix && <span className="text-[#99AD59] ml-4">{suffix}</span>}
+                            <span className="text-[#C21D2E]">{prefix}</span>
+                            {suffix && <span className="text-[#F9B344] ml-4">{suffix}</span>}
                          </h2>
-                         <Leaf className="w-[62px] h-[62px] text-[#99AD59] fill-current -mt-4" />
+                         <Leaf className="w-[62px] h-[62px] text-[#F9B344] fill-current -mt-4" />
                     </div>
-                    <h3 className="text-[52px] font-bold tracking-tight text-[#4D5A2A] mt-[-10px] ml-2" style={textStyle}>
+                    <h3 className="text-[52px] font-bold tracking-tight text-[#12A89D] mt-[-10px] ml-2" style={textStyle}>
                         #{data.itemName}
                     </h3>
                 </div>
@@ -117,13 +117,13 @@ const PosterCanvas: React.FC<{
                     {data.winners.slice(0, 3).map((winner, idx) => (
                         <div key={idx} className="min-w-0 flex flex-col">
                             <h4 
-                                className={`text-[46px] font-black uppercase tracking-tighter leading-tight text-[#283618] whitespace-nowrap mb-1 ${isDownloadMode ? 'overflow-visible' : 'truncate'}`} 
+                                className={`text-[46px] font-black uppercase tracking-tighter leading-tight text-[#C21D2E] whitespace-nowrap mb-1 ${isDownloadMode ? 'overflow-visible' : 'truncate'}`} 
                                 style={textStyle}
                             >
                                 {winner.name}
                             </h4>
                             <div className="flex items-center gap-3">
-                                <p className="text-[21px] font-black text-[#606C38] uppercase tracking-[0.2em] leading-tight" style={textStyle}>
+                                <p className="text-[21px] font-black text-[#12A89D] uppercase tracking-[0.2em] leading-tight" style={textStyle}>
                                     {winner.place}
                                 </p>
                                 <span className="text-zinc-400 font-light text-xl">|</span>

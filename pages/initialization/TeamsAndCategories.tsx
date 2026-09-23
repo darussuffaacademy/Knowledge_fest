@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Category, Team, Participant } from '../../types';
 import Card from '../../components/Card';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 // --- Utils ---
 
@@ -70,6 +71,29 @@ const EntityManager = <T extends { id: string; name: string }>({
 }: EntityManagerProps<T>) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [confirmDialog, setConfirmDialog] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        confirmText?: string;
+        action?: () => Promise<void> | void;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+    });
+    const [isActionLoading, setIsActionLoading] = useState(false);
+
+    const executeConfirm = async () => {
+        if (!confirmDialog.action) return;
+        setIsActionLoading(true);
+        try {
+            await confirmDialog.action();
+            setConfirmDialog(prev => ({ ...prev, isOpen: false, action: undefined }));
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
     const filteredItems = useMemo(() => {
         let res = [...items];
@@ -114,7 +138,18 @@ const EntityManager = <T extends { id: string; name: string }>({
                 <div className="flex items-center gap-3 shrink-0">
                     {selectedIds.size > 0 && (
                         <button 
-                            onClick={() => { if(confirm(`Purge ${selectedIds.size} records?`)) { onDelete(Array.from(selectedIds)); setSelectedIds(new Set()); } }}
+                            onClick={() => {
+                                setConfirmDialog({
+                                    isOpen: true,
+                                    title: `Delete Selected ${type === 'TEAM' ? 'Teams' : 'Categories'}`,
+                                    message: `Confirm deletion of ${selectedIds.size} selected record(s)? This cannot be undone.`,
+                                    confirmText: `Delete (${selectedIds.size})`,
+                                    action: () => {
+                                        onDelete(Array.from(selectedIds));
+                                        setSelectedIds(new Set());
+                                    }
+                                });
+                            }}
                             className="flex items-center gap-2 px-5 py-3 bg-rose-500 text-white rounded-2xl hover:bg-rose-600 transition-all shadow-lg active:scale-95 text-xs font-black uppercase tracking-widest"
                         >
                             <Trash2 size={16} /> Delete ({selectedIds.size})
@@ -157,8 +192,32 @@ const EntityManager = <T extends { id: string; name: string }>({
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); onUpdate(item); }}
                                             className={`p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-within:opacity-100 ${isSelected ? 'text-amazio-secondary hover:bg-amazio-secondary/10' : 'text-zinc-300 hover:text-amazio-primary hover:bg-zinc-100 dark:hover:bg-white/5'}`}
+                                            title="Edit"
                                         >
                                             <Edit3 size={18} />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setConfirmDialog({
+                                                    isOpen: true,
+                                                    title: `Delete ${type === 'TEAM' ? 'Team' : 'Category'}`,
+                                                    message: `Are you sure you want to delete "${item.name}"? This will permanently remove it from the competition.`,
+                                                    confirmText: 'Delete',
+                                                    action: () => {
+                                                        onDelete([item.id]);
+                                                        setSelectedIds(prev => {
+                                                            const next = new Set(prev);
+                                                            next.delete(item.id);
+                                                            return next;
+                                                        });
+                                                    }
+                                                });
+                                            }}
+                                            className={`p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-within:opacity-100 ${isSelected ? 'text-rose-600 hover:bg-rose-50' : 'text-zinc-300 hover:text-rose-600 hover:bg-zinc-100 dark:hover:bg-white/5'}`}
+                                            title="Delete"
+                                        >
+                                            <Trash2 size={18} />
                                         </button>
                                         {isSelected && <div className="p-2 bg-amazio-secondary rounded-xl text-white shadow-inner"><Check size={18} strokeWidth={3} /></div>}
                                     </div>
@@ -223,6 +282,16 @@ const EntityManager = <T extends { id: string; name: string }>({
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={confirmDialog.isOpen}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                confirmText={confirmDialog.confirmText || 'Delete'}
+                isLoading={isActionLoading}
+                onConfirm={executeConfirm}
+                onClose={() => { if (!isActionLoading) setConfirmDialog(prev => ({ ...prev, isOpen: false })); }}
+            />
         </div>
     );
 };
@@ -290,7 +359,7 @@ const TeamFormModal: React.FC<TeamFormModalProps> = ({ isOpen, onClose, onSave, 
                 <div className="p-8 space-y-8">
                     <div>
                         <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Identity Title</label>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sapphire House" className="w-full p-4 bg-zinc-100 dark:bg-black/20 rounded-2xl text-lg font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all border-none shadow-inner" autoFocus />
+                        <input type="text" value={name || ''} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sapphire House" className="w-full p-4 bg-zinc-100 dark:bg-black/20 rounded-2xl text-lg font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all border-none shadow-inner" autoFocus />
                     </div>
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
@@ -305,22 +374,22 @@ const TeamFormModal: React.FC<TeamFormModalProps> = ({ isOpen, onClose, onSave, 
                                 <>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Official Team Leader</label>
-                                        <input type="text" value={newLeaderName} onChange={(e) => setNewLeaderName(e.target.value)} placeholder="Full Name..." className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm border-none" />
+                                        <input type="text" value={newLeaderName || ''} onChange={(e) => setNewLeaderName(e.target.value)} placeholder="Full Name..." className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm border-none" />
                                     </div>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Assistant Coordinator</label>
-                                        <input type="text" value={newAssistantName} onChange={(e) => setNewAssistantName(e.target.value)} placeholder="Full Name..." className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm border-none" />
+                                        <input type="text" value={newAssistantName || ''} onChange={(e) => setNewAssistantName(e.target.value)} placeholder="Full Name..." className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors shadow-sm border-none" />
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Assign Leader</label>
-                                        <select value={selectedLeaderId} onChange={(e) => setSelectedLeaderId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <select value={selectedLeaderId || ''} onChange={(e) => setSelectedLeaderId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                                     </div>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Assign Assistant</label>
-                                        <select value={selectedAssistantId} onChange={(e) => setSelectedAssistantId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <select value={selectedAssistantId || ''} onChange={(e) => setSelectedAssistantId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                                     </div>
                                 </>
                             )}
@@ -391,14 +460,14 @@ const CategoryFormModal: React.FC<CategoryFormModalProps> = ({ isOpen, onClose, 
                 <div className="p-8 space-y-8">
                     <div>
                         <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Scope Title</label>
-                        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Intermediates" className="w-full p-4 bg-zinc-100 dark:bg-black/20 rounded-2xl text-lg font-bold outline-none focus:ring-2 focus:ring-amber-500/20 transition-all border-none shadow-inner" autoFocus />
+                        <input type="text" value={name || ''} onChange={(e) => setName(e.target.value)} placeholder="e.g. Intermediates" className="w-full p-4 bg-zinc-100 dark:bg-black/20 rounded-2xl text-lg font-bold outline-none focus:ring-2 focus:ring-amber-500/20 transition-all border-none shadow-inner" autoFocus />
                     </div>
                     <div className="space-y-4">
                         <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">Threshold Constraints</label>
                         <div className="grid grid-cols-3 gap-4">
-                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">On Stage</label><input type="number" value={maxOnStage} onChange={(e) => setMaxOnStage(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
-                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">Off Stage</label><input type="number" value={maxOffStage} onChange={(e) => setMaxOffStage(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
-                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">Combined</label><input type="number" value={maxCombined} onChange={(e) => setMaxCombined(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
+                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">On Stage</label><input type="number" value={maxOnStage || ''} onChange={(e) => setMaxOnStage(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
+                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">Off Stage</label><input type="number" value={maxOffStage || ''} onChange={(e) => setMaxOffStage(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
+                            <div><label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 text-center">Combined</label><input type="number" value={maxCombined || ''} onChange={(e) => setMaxCombined(e.target.value)} placeholder="∞" className="w-full p-3 text-center bg-zinc-100 dark:bg-black/20 rounded-xl text-sm font-bold outline-none border-none shadow-sm focus:ring-2 focus:ring-amber-500/20 transition-all" /></div>
                         </div>
                     </div>
                     <div className="flex items-center gap-4 p-5 rounded-[2rem] bg-zinc-100 dark:bg-white/[0.02] cursor-pointer shadow-sm" onClick={() => setIsGeneralCategory(!isGeneralCategory)}>

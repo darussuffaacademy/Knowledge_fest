@@ -860,7 +860,7 @@ const GlobalPrizeEditor: React.FC<{ type: 'single' | 'group' }> = ({ type }) => 
                         <span className={`block text-[8px] font-black uppercase text-center ${p.c}`}>{p.l}</span>
                         <input 
                             type="number" 
-                            value={(defaults as any)[p.k]} 
+                            value={(defaults as any)[p.k] ?? 0} 
                             onChange={e => handleChange(p.k as any, e.target.value)}
                             className="w-full p-2.5 rounded-xl bg-white dark:bg-zinc-800 border text-center font-black text-sm"
                         />
@@ -920,10 +920,10 @@ const GradeRuleEditor: React.FC<{ itemType: 'single' | 'group' }> = ({ itemType 
             </div>
             <form onSubmit={handleSave} className="mt-8 p-6 rounded-[2rem] bg-zinc-50/50 dark:bg-white/[0.01] border border-zinc-100 dark:border-zinc-800 flex flex-col gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <input type="text" placeholder="Grade" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20" required/>
-                    <input type="number" placeholder="Min %" value={formData.lowerLimit} onChange={e => setFormData({...formData, lowerLimit: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
-                    <input type="number" placeholder="Max %" value={formData.upperLimit} onChange={e => setFormData({...formData, upperLimit: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
-                    <input type="number" placeholder="Pts" value={formData.points} onChange={e => setFormData({...formData, points: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
+                    <input type="text" placeholder="Grade" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20" required/>
+                    <input type="number" placeholder="Min %" value={formData.lowerLimit ?? 0} onChange={e => setFormData({...formData, lowerLimit: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
+                    <input type="number" placeholder="Max %" value={formData.upperLimit ?? 100} onChange={e => setFormData({...formData, upperLimit: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
+                    <input type="number" placeholder="Pts" value={formData.points ?? 0} onChange={e => setFormData({...formData, points: +e.target.value})} className="w-full rounded-xl p-3 text-sm font-bold border border-zinc-200 dark:border-zinc-700 outline-none bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-indigo-500/20"/>
                 </div>
                 <button type="submit" className="w-full py-4 bg-amazio-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">
                     {editingId ? 'Update Range' : 'Add Rule'}

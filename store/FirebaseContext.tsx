@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { doc, onSnapshot, setDoc, updateDoc, collection } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
@@ -369,7 +369,59 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     addTeam: teamOps.add, addMultipleTeams: async (p) => writeDoc('teams', [...(state?.teams || []), ...p]),
     updateTeam: teamOps.update, reorderTeams: (p) => writeDoc('teams', p), deleteMultipleTeams: teamOps.deleteMultiple,
     addItem: itemOps.add, addMultipleItems: async (p) => writeDoc('items', [...(state?.items || []), ...p]),
-    updateItem: itemOps.update, deleteMultipleItems: itemOps.deleteMultiple,
+    updateItem: itemOps.update, 
+    deleteMultipleItems: async (ids: string[]) => {
+        if (!state) return;
+        const newItems = state.items.filter(item => !ids.includes(item.id));
+        const promises: Promise<any>[] = [writeDoc('items', newItems)];
+
+        let participantsChanged = false;
+        const newParticipants = state.participants.map(p => {
+            const hasItem = p.itemIds.some(id => ids.includes(id));
+            if (!hasItem) return p;
+            participantsChanged = true;
+            const nextItemIds = p.itemIds.filter(id => !ids.includes(id));
+            const nextItemGroups = { ...(p.itemGroups || {}) };
+            const nextLeaders = (p.groupLeaderItemIds || []).filter(id => !ids.includes(id));
+            const nextChests = { ...(p.groupChestNumbers || {}) };
+            ids.forEach(id => {
+                delete nextItemGroups[id];
+                delete nextChests[id];
+            });
+            return {
+                ...p,
+                itemIds: nextItemIds,
+                itemGroups: nextItemGroups,
+                groupLeaderItemIds: nextLeaders,
+                groupChestNumbers: nextChests
+            };
+        });
+        if (participantsChanged) {
+            promises.push(writeDoc('participants', newParticipants));
+        }
+
+        if (state.schedule.some(s => ids.includes(s.itemId))) {
+            const newSchedule = state.schedule.filter(s => !ids.includes(s.itemId));
+            promises.push(writeDoc('schedule', newSchedule));
+        }
+
+        if (state.judgeAssignments.some(j => ids.includes(j.itemId))) {
+            const newJudgeAssignments = state.judgeAssignments.filter(j => !ids.includes(j.itemId));
+            promises.push(writeDoc('judgeAssignments', newJudgeAssignments));
+        }
+
+        if (state.tabulation.some(t => ids.includes(t.itemId))) {
+            const newTabulation = state.tabulation.filter(t => !ids.includes(t.itemId));
+            promises.push(writeDoc('tabulation', newTabulation));
+        }
+
+        if (state.results.some(r => ids.includes(r.itemId))) {
+            const newResults = state.results.filter(r => !ids.includes(r.itemId));
+            promises.push(writeDoc('results', newResults));
+        }
+
+        await Promise.all(promises);
+    },
     addGrade: async ({ itemType, grade }) => {
         const list = [...state!.gradePoints[itemType], { ...grade, id: `g_${Date.now()}` }];
         await writeDoc('gradePoints', { ...state!.gradePoints, [itemType]: list });
@@ -404,7 +456,16 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         const next = state!.participants.map(x => map.has(x.id) ? map.get(x.id)! : x);
         await writeDoc('participants', next);
     },
-    deleteMultipleParticipants: partOps.deleteMultiple,
+    deleteMultipleParticipants: async (ids: string[]) => {
+        if (!state) return;
+        const newParticipants = state.participants.filter(p => !ids.includes(p.id));
+        const promises: Promise<any>[] = [writeDoc('participants', newParticipants)];
+        if (state.tabulation.some(t => ids.includes(t.participantId))) {
+            const newTabulation = state.tabulation.filter(t => !ids.includes(t.participantId));
+            promises.push(writeDoc('tabulation', newTabulation));
+        }
+        await Promise.all(promises);
+    },
     setSchedule: (p) => writeDoc('schedule', p),
     addScheduleEvent: async (p) => writeDoc('schedule', [...state!.schedule, p]),
     updateTabulationEntry: async (p) => {
@@ -484,4 +545,12 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       {children}
     </FirebaseContext.Provider>
   );
+};
+
+export const useFirebase = () => {
+  const context = useContext(FirebaseContext);
+  if (!context) {
+    throw new Error('useFirebase must be used within a FirebaseProvider');
+  }
+  return context;
 };

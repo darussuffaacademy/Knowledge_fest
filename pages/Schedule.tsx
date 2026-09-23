@@ -367,15 +367,15 @@ const SchedulePage: React.FC = () => {
                                         </div>
                                         <div className="grid grid-cols-2 gap-2 sm:gap-3">
                                             <div className="relative">
-                                                <select value={editFormData.date} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.eventDays || []).map(d => <option key={d} value={d}>{d}</option>)}</select>
+                                                <select value={editFormData.date || ''} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.eventDays || []).map(d => <option key={d} value={d}>{d}</option>)}</select>
                                                 <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                                             </div>
                                             <div className="relative">
-                                                <select value={editFormData.time} onChange={e => setEditFormData({...editFormData, time: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.timeSlots || []).map(t => <option key={t} value={t}>{t}</option>)}</select>
+                                                <select value={editFormData.time || ''} onChange={e => setEditFormData({...editFormData, time: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.timeSlots || []).map(t => <option key={t} value={t}>{t}</option>)}</select>
                                                 <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                                             </div>
                                             <div className="relative col-span-2">
-                                                <select value={editFormData.stage} onChange={e => setEditFormData({...editFormData, stage: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.stages || []).map(s => <option key={s} value={s}>{s}</option>)}</select>
+                                                <select value={editFormData.stage || ''} onChange={e => setEditFormData({...editFormData, stage: e.target.value})} className="w-full appearance-none p-2 bg-zinc-50 dark:bg-zinc-900 border rounded-lg text-[10px] font-bold outline-none focus:ring-1 focus:ring-indigo-500">{(state.settings.stages || []).map(s => <option key={s} value={s}>{s}</option>)}</select>
                                                 <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                                             </div>
                                         </div>
