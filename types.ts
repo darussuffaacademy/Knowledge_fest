@@ -111,11 +111,27 @@ export interface ProjectorSettings {
     rotationSpeed: number; 
 }
 
+export interface HomePageSettings {
+    badgeText?: string;
+    editionText?: string;
+    heroTitle?: string;
+    heroQuote?: string;
+    heroDescription?: string;
+    portalTitle?: string;
+    portalSubtitle?: string;
+    showStats?: boolean;
+    showLiveDashboardBtn?: boolean;
+    showLiveProjectorBtn?: boolean;
+    showCreativeStudioBtn?: boolean;
+    customHeroBannerUrl?: string;
+}
+
 export interface Settings {
   organizingTeam: string;
   heading: string;
   description: string;
   eventDates?: string[]; 
+  homePage?: HomePageSettings;
   maxItemsPerParticipant: {
     onStage: number;
     offStage: number;

@@ -45,7 +45,21 @@ const defaultState: AppState = {
       defaultShowFooter: true,
     },
     institutionDetails: { name: '', address: '', email: '', contactNumber: '', description: '', logoUrl: '' },
-    branding: { typographyUrl: '', teamLogoUrl: '' }
+    branding: { typographyUrl: '', teamLogoUrl: '' },
+    homePage: {
+      badgeText: 'The Rooted Tree',
+      editionText: '2026 EDITION',
+      heroTitle: 'AMAZIO',
+      heroQuote: '"Where Art Meets Orchestration"',
+      heroDescription: 'Welcome to the official management terminal for the Art Fest. Explore live results, schedules, and the creative studio through our public channels.',
+      portalTitle: 'Operator Access',
+      portalSubtitle: 'Secure Core Authentication',
+      showStats: true,
+      showLiveDashboardBtn: true,
+      showLiveProjectorBtn: true,
+      showCreativeStudioBtn: true,
+      customHeroBannerUrl: ''
+    }
   },
   instructions: {},
   lotPool: [],
@@ -83,6 +97,7 @@ const SETTINGS_DOC_MAPPING: Record<string, (keyof Settings)[]> = {
   'settings_branding': ['branding'],
   'settings_reports': ['reportSettings'],
   'settings_ux': ['generalInstructions', 'enableFloatingNav', 'mobileSidebarMode'],
+  'settings_homePage': ['homePage'],
 };
 
 const cleanData = (data: any): any => {
@@ -255,6 +270,14 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
                   ...(value || {})
                 }
               };
+          }
+
+          if (key === 'codeLetters' && Array.isArray(value)) {
+              const sanitizedCodes = value.map((c: any, idx: number) => ({
+                  ...c,
+                  id: c.id || `c_${c.code || 'code'}_${idx}_${Date.now()}`
+              }));
+              return { ...current, codeLetters: sanitizedCodes };
           }
 
           return { ...current, [key]: value !== null ? value : (defaultState as any)[key] };
@@ -434,8 +457,14 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         const list = state!.gradePoints[itemType].filter(g => g.id !== gradeId);
         await writeDoc('gradePoints', { ...state!.gradePoints, [itemType]: list });
     },
-    addCodeLetter: async (p) => writeDoc('codeLetters', [...state!.codeLetters, { ...p, id: `c_${Date.now()}` }]),
-    addMultipleCodeLetters: async (p) => writeDoc('codeLetters', [...state!.codeLetters, ...p]),
+    addCodeLetter: async (p) => writeDoc('codeLetters', [...state!.codeLetters, { ...p, id: p.id || `c_${p.code || Date.now()}_${Date.now()}` }]),
+    addMultipleCodeLetters: async (p) => {
+        const itemsWithId = p.map((item, idx) => ({
+            ...item,
+            id: item.id || `c_${item.code || 'code'}_${Date.now()}_${idx}`
+        }));
+        return writeDoc('codeLetters', [...state!.codeLetters, ...itemsWithId]);
+    },
     updateCodeLetter: async (p) => writeDoc('codeLetters', state!.codeLetters.map(c => c.id === p.id ? p : c)),
     reorderCodeLetters: (p) => writeDoc('codeLetters', p),
     deleteCodeLetter: async (id) => writeDoc('codeLetters', state!.codeLetters.filter(c => c.id !== id)),

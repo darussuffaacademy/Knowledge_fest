@@ -142,23 +142,34 @@ export const TimerProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     // Wake Lock
     useEffect(() => {
+        let isCancelled = false;
         const requestWakeLock = async () => {
             if ('wakeLock' in navigator && isRunning) {
                 try {
-                    wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-                } catch (err) {
-                    console.error(`${err} - Wake Lock failed`);
+                    const lock = await (navigator as any).wakeLock.request('screen');
+                    if (isCancelled) {
+                        lock?.release?.().catch(() => {});
+                    } else {
+                        wakeLockRef.current = lock;
+                    }
+                } catch {
+                    // Disallowed by permissions policy in embedded iframes - fail silently
+                    wakeLockRef.current = null;
                 }
             } else {
                 if (wakeLockRef.current) {
-                    wakeLockRef.current.release();
+                    wakeLockRef.current.release?.().catch(() => {});
                     wakeLockRef.current = null;
                 }
             }
         };
         requestWakeLock();
         return () => {
-             if (wakeLockRef.current) wakeLockRef.current.release();
+            isCancelled = true;
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release?.().catch(() => {});
+                wakeLockRef.current = null;
+            }
         };
     }, [isRunning]);
 

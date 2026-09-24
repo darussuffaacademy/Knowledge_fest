@@ -421,6 +421,22 @@ const GeneralSettings: React.FC = () => {
         eventDates: state?.settings.eventDates || [], 
         branding: state?.settings.branding || { eventName: '', description: '', typographyUrl: '', typographyUrlLight: '', typographyUrlDark: '', teamLogoUrl: '' } 
     });
+
+    const [isEditingHome, setIsEditingHome] = useState(false);
+    const [homeData, setHomeData] = useState({
+        badgeText: state?.settings.homePage?.badgeText ?? 'The Rooted Tree',
+        editionText: state?.settings.homePage?.editionText ?? '2026 EDITION',
+        heroTitle: state?.settings.homePage?.heroTitle ?? 'AMAZIO',
+        heroQuote: state?.settings.homePage?.heroQuote ?? '"Where Art Meets Orchestration"',
+        heroDescription: state?.settings.homePage?.heroDescription ?? 'Welcome to the official management terminal for the Art Fest. Explore live results, schedules, and the creative studio through our public channels.',
+        portalTitle: state?.settings.homePage?.portalTitle ?? 'Operator Access',
+        portalSubtitle: state?.settings.homePage?.portalSubtitle ?? 'Secure Core Authentication',
+        showStats: state?.settings.homePage?.showStats !== false,
+        showLiveDashboardBtn: state?.settings.homePage?.showLiveDashboardBtn !== false,
+        showLiveProjectorBtn: state?.settings.homePage?.showLiveProjectorBtn !== false,
+        showCreativeStudioBtn: state?.settings.homePage?.showCreativeStudioBtn !== false,
+        customHeroBannerUrl: state?.settings.homePage?.customHeroBannerUrl ?? ''
+    });
     
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
@@ -441,6 +457,25 @@ const GeneralSettings: React.FC = () => {
         }
     }, [state?.settings, isEditingOrg]);
 
+    useEffect(() => {
+        if (!isEditingHome && state?.settings) {
+            setHomeData({
+                badgeText: state.settings.homePage?.badgeText ?? 'The Rooted Tree',
+                editionText: state.settings.homePage?.editionText ?? '2026 EDITION',
+                heroTitle: state.settings.homePage?.heroTitle ?? 'AMAZIO',
+                heroQuote: state.settings.homePage?.heroQuote ?? '"Where Art Meets Orchestration"',
+                heroDescription: state.settings.homePage?.heroDescription ?? 'Welcome to the official management terminal for the Art Fest. Explore live results, schedules, and the creative studio through our public channels.',
+                portalTitle: state.settings.homePage?.portalTitle ?? 'Operator Access',
+                portalSubtitle: state.settings.homePage?.portalSubtitle ?? 'Secure Core Authentication',
+                showStats: state.settings.homePage?.showStats !== false,
+                showLiveDashboardBtn: state.settings.homePage?.showLiveDashboardBtn !== false,
+                showLiveProjectorBtn: state.settings.homePage?.showLiveProjectorBtn !== false,
+                showCreativeStudioBtn: state.settings.homePage?.showCreativeStudioBtn !== false,
+                customHeroBannerUrl: state.settings.homePage?.customHeroBannerUrl ?? ''
+            });
+        }
+    }, [state?.settings, isEditingHome]);
+
     if (!state) return <div>Loading...</div>;
 
     const handleSaveInst = async () => { await updateSettings({ institutionDetails: instData }); setIsEditingInst(false); };
@@ -460,6 +495,13 @@ const GeneralSettings: React.FC = () => {
             } 
         }); 
         setIsEditingOrg(false); 
+    };
+
+    const handleSaveHome = async () => {
+        await updateSettings({
+            homePage: homeData
+        });
+        setIsEditingHome(false);
     };
 
     const handlePermissionChange = (role: UserRole, tab: string, checked: boolean) => {
@@ -735,6 +777,143 @@ const GeneralSettings: React.FC = () => {
                                 </div>
                             </div>
                         </Card>
+
+                        {/* Home Page (Landing View) */}
+                        <Card title="Home Page (Landing View)" action={isEditingHome ? <button onClick={handleSaveHome} className="p-2 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors"><Check size={20}/></button> : <button onClick={() => setIsEditingHome(true)} className="p-2 text-zinc-400 hover:text-indigo-500 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-lg transition-colors"><Edit2 size={18}/></button>}>
+                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                                <div className="lg:col-span-3 space-y-6">
+                                    {/* Top Badges and Titles */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Theme Tagline / Badge</label>
+                                            <input 
+                                                type="text" 
+                                                value={homeData.badgeText} 
+                                                onChange={e => setHomeData({...homeData, badgeText: e.target.value})} 
+                                                disabled={!isEditingHome} 
+                                                className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                                placeholder="e.g. The Rooted Tree"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Edition Tag</label>
+                                            <input 
+                                                type="text" 
+                                                value={homeData.editionText} 
+                                                onChange={e => setHomeData({...homeData, editionText: e.target.value})} 
+                                                disabled={!isEditingHome} 
+                                                className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                                placeholder="e.g. 2026 EDITION"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Hero Title (Fallback)</label>
+                                            <input 
+                                                type="text" 
+                                                value={homeData.heroTitle} 
+                                                onChange={e => setHomeData({...homeData, heroTitle: e.target.value})} 
+                                                disabled={!isEditingHome} 
+                                                className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                                placeholder="e.g. AMAZIO"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Slogan and Description */}
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Hero Quote / Slogan</label>
+                                        <input 
+                                            type="text" 
+                                            value={homeData.heroQuote} 
+                                            onChange={e => setHomeData({...homeData, heroQuote: e.target.value})} 
+                                            disabled={!isEditingHome} 
+                                            className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                            placeholder='e.g. "Where Art Meets Orchestration"'
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Welcome Text / Description</label>
+                                        <textarea 
+                                            rows={2}
+                                            value={homeData.heroDescription} 
+                                            onChange={e => setHomeData({...homeData, heroDescription: e.target.value})} 
+                                            disabled={!isEditingHome} 
+                                            className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50 resize-none"
+                                            placeholder="Welcome message paragraph for visitors..."
+                                        />
+                                    </div>
+
+                                    {/* Portal Titles */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Operator Portal Title</label>
+                                            <input 
+                                                type="text" 
+                                                value={homeData.portalTitle} 
+                                                onChange={e => setHomeData({...homeData, portalTitle: e.target.value})} 
+                                                disabled={!isEditingHome} 
+                                                className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                                placeholder="e.g. Operator Access"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Portal Subtitle</label>
+                                            <input 
+                                                type="text" 
+                                                value={homeData.portalSubtitle} 
+                                                onChange={e => setHomeData({...homeData, portalSubtitle: e.target.value})} 
+                                                disabled={!isEditingHome} 
+                                                className="w-full p-4 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                                placeholder="e.g. Secure Core Authentication"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Visibility Toggles */}
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3 ml-1">Display Components & Quick Links</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <ToggleItem 
+                                                label="Show Statistics Counter Cards" 
+                                                isChecked={homeData.showStats} 
+                                                onChange={v => isEditingHome && setHomeData({...homeData, showStats: v})} 
+                                            />
+                                            <ToggleItem 
+                                                label="Show Live Dashboard CTA" 
+                                                isChecked={homeData.showLiveDashboardBtn} 
+                                                onChange={v => isEditingHome && setHomeData({...homeData, showLiveDashboardBtn: v})} 
+                                            />
+                                            <ToggleItem 
+                                                label="Show Live Projector CTA" 
+                                                isChecked={homeData.showLiveProjectorBtn} 
+                                                onChange={v => isEditingHome && setHomeData({...homeData, showLiveProjectorBtn: v})} 
+                                            />
+                                            <ToggleItem 
+                                                label="Show Creative Studio CTA" 
+                                                isChecked={homeData.showCreativeStudioBtn} 
+                                                onChange={v => isEditingHome && setHomeData({...homeData, showCreativeStudioBtn: v})} 
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Custom Hero Graphic */}
+                                <div className="lg:col-span-1 h-full">
+                                    <div className="h-full flex flex-col">
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Custom Hero Banner</label>
+                                        <div className="flex-grow">
+                                            <ImageUpload 
+                                                label="" 
+                                                description="Optional hero graphic override for the landing page header." 
+                                                currentValue={homeData.customHeroBannerUrl} 
+                                                onChange={v => setHomeData({...homeData, customHeroBannerUrl: v})} 
+                                                disabled={!isEditingHome}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
                     </div>
                 );
             case 'display': 
@@ -745,7 +924,7 @@ const GeneralSettings: React.FC = () => {
                             <Card title="Identity & Typography">
                                 <div className="space-y-10">
                                     {/* Language Fonts */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                                    <div className="grid grid-cols-1 gap-6">
                                         <LanguageFontCard 
                                             title="English Primary"
                                             subtitle="Main Brand Font"

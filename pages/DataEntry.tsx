@@ -1,7 +1,8 @@
-import { AlertTriangle, Award, Check, CheckCircle2, ChevronDown, ChevronRight, Edit3, Filter, LayoutGrid, Layers, ListPlus, Plus, Search, ShieldCheck, Tag, Trash2, User as UserIcon, Users as UsersIcon, X, MapPin, UserPlus, Info, Crown, ListCheck, UserCheck, ArrowRight, Save, Zap } from 'lucide-react';
+import { AlertTriangle, Award, Check, CheckCircle2, ChevronDown, ChevronRight, Edit3, Filter, LayoutGrid, Layers, ListPlus, Plus, Search, ShieldCheck, Tag, Trash2, User as UserIcon, Users as UsersIcon, X, MapPin, UserPlus, Info, Crown, ListCheck, UserCheck, ArrowRight, Save, Zap, UserMinus, RotateCcw } from 'lucide-react';
 import React, { useMemo, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import Card from '../components/Card';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { useFirebase } from '../hooks/useFirebase';
 import { Item, ItemType, Participant, Team, User, AppState, Category } from '../types';
 
@@ -211,6 +212,26 @@ const ItemManagementModal: React.FC<{
         });
     };
 
+    const handleClearAllEnrolled = () => {
+        if (totalEnrolled === 0) return;
+        setDraftParticipants(prev => prev.map(participant => {
+            if (!participant.itemIds.includes(item.id)) return participant;
+            const newItemIds = participant.itemIds.filter(id => id !== item.id);
+            const newItemGroups = { ...(participant.itemGroups || {}) };
+            delete newItemGroups[item.id];
+            const nextLeaders = (participant.groupLeaderItemIds || []).filter(id => id !== item.id);
+            const nextChests = { ...(participant.groupChestNumbers || {}) };
+            delete nextChests[item.id];
+            return { 
+                ...participant, 
+                itemIds: newItemIds, 
+                itemGroups: newItemGroups, 
+                groupLeaderItemIds: nextLeaders,
+                groupChestNumbers: nextChests
+            };
+        }));
+    };
+
     const handleConfirmSave = async () => {
         setIsSaving(true);
         try {
@@ -244,6 +265,16 @@ const ItemManagementModal: React.FC<{
                                 <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">{category?.name} • {item.type} • {item.performanceType}</p>
                                 <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
                                 <span className="px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest">Live Total: {totalEnrolled}</span>
+                                {totalEnrolled > 0 && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleClearAllEnrolled}
+                                        title="Remove all enrolled participants from this event"
+                                        className="px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-[9px] font-black uppercase tracking-widest border border-rose-200 dark:border-rose-900/50 transition-colors flex items-center gap-1"
+                                    >
+                                        <Trash2 size={11} /> Clear All (0)
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -498,6 +529,17 @@ const ParticipantManagementModal: React.FC<{
         }
     };
 
+    const handleClearAllPrograms = () => {
+        if (!draftParticipant || draftParticipant.itemIds.length === 0) return;
+        setDraftParticipant({
+            ...draftParticipant,
+            itemIds: [],
+            itemGroups: {},
+            groupLeaderItemIds: [],
+            groupChestNumbers: {}
+        });
+    };
+
     const handleConfirmSave = async () => {
         setIsSaving(true);
         try {
@@ -525,6 +567,16 @@ const ParticipantManagementModal: React.FC<{
                                 <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border ${theme.border} ${theme.bg} ${theme.text}`}>{category?.name}</span>
                                 <span className="w-1 h-1 rounded-full bg-zinc-300"></span>
                                 <span className="px-2 py-0.5 rounded bg-indigo-500 text-white text-[9px] font-black uppercase tracking-widest">Enrolled: {currentEnrolledCount}</span>
+                                {currentEnrolledCount > 0 && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleClearAllPrograms}
+                                        title="Remove all enrolled programs for this participant"
+                                        className="px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-[9px] font-black uppercase tracking-widest border border-rose-200 dark:border-rose-900/50 transition-colors flex items-center gap-1"
+                                    >
+                                        <Trash2 size={11} /> Clear All (0)
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -598,8 +650,10 @@ const ParticipantManagementModal: React.FC<{
 // --- View Components ---
 
 const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTriggerSelection }) => {
-    const { state, globalSearchTerm, globalFilters } = useFirebase();
+    const { state, globalSearchTerm, globalFilters, updateMultipleParticipants } = useFirebase();
     const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+    const [itemToClear, setItemToClear] = useState<Item | null>(null);
+    const [isClearing, setIsClearing] = useState(false);
 
     const filteredItems = useMemo(() => {
         if (!state) return [];
@@ -610,6 +664,38 @@ const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTrigger
             return matchesSearch && matchesCat && matchesPerf;
         }).sort((a,b) => a.name.localeCompare(b.name));
     }, [state, globalSearchTerm, globalFilters]);
+
+    const handleClearItemEnrollments = async () => {
+        if (!itemToClear || !state) return;
+        setIsClearing(true);
+        try {
+            const affected = state.participants.filter(p => p.itemIds.includes(itemToClear.id));
+            if (affected.length > 0) {
+                const updated = affected.map(p => {
+                    const newItemIds = p.itemIds.filter(id => id !== itemToClear.id);
+                    const newItemGroups = { ...(p.itemGroups || {}) };
+                    delete newItemGroups[itemToClear.id];
+                    const nextLeaders = (p.groupLeaderItemIds || []).filter(id => id !== itemToClear.id);
+                    const nextChests = { ...(p.groupChestNumbers || {}) };
+                    delete nextChests[itemToClear.id];
+                    return {
+                        ...p,
+                        itemIds: newItemIds,
+                        itemGroups: newItemGroups,
+                        groupLeaderItemIds: nextLeaders,
+                        groupChestNumbers: nextChests
+                    };
+                });
+                await updateMultipleParticipants(updated);
+            }
+            setItemToClear(null);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to clear event enrollments.");
+        } finally {
+            setIsClearing(false);
+        }
+    };
 
     if (!state) return null;
 
@@ -630,7 +716,21 @@ const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTrigger
                                     <div className={`px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border ${theme.border} ${theme.bg} ${theme.text}`}>{category?.name}</div>
                                     {category?.isGeneralCategory && <span className="bg-amber-500 text-white text-[7px] font-black uppercase px-1.5 py-0.5 rounded shadow-sm">General</span>}
                                 </div>
-                                <button onClick={() => setSelectedItem(item)} className="p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-within:opacity-100 bg-zinc-50 dark:bg-white/5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-110"><ListPlus size={18} /></button>
+                                <div className="flex items-center gap-1.5">
+                                    {enrolledCount > 0 && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setItemToClear(item); }} 
+                                            title="Remove all enrolled participants and make it zero" 
+                                            className="p-2 rounded-xl transition-all bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/50 hover:scale-105 flex items-center gap-1 shadow-sm"
+                                        >
+                                            <UserMinus size={16} />
+                                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline-block">Clear (0)</span>
+                                        </button>
+                                    )}
+                                    <button onClick={() => setSelectedItem(item)} title="Manage Event Enrollment" className="p-2 rounded-xl transition-all bg-zinc-50 dark:bg-white/5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-110">
+                                        <ListPlus size={18} />
+                                    </button>
+                                </div>
                             </div>
                             <h4 className="font-black text-amazio-primary dark:text-white text-lg uppercase tracking-tight leading-tight mb-2 line-clamp-1">{item.name}</h4>
                             <div className="flex items-center gap-2 mb-4">
@@ -643,19 +743,43 @@ const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTrigger
                                     <div className={`w-2 h-2 rounded-full ${enrolledCount > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-200'}`}></div>
                                     <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{enrolledCount} / {maxPossible} Slots Filled</span>
                                 </div>
+                                {enrolledCount > 0 && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setItemToClear(item); }}
+                                        className="text-[9px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                        title="Remove all enrolled participants (Reset to 0)"
+                                    >
+                                        <Trash2 size={12}/> Reset to 0
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
             {selectedItem && <ItemManagementModal isOpen={!!selectedItem} onClose={() => setSelectedItem(null)} item={selectedItem} />}
+            {itemToClear && (
+                <ConfirmModal 
+                    isOpen={!!itemToClear}
+                    title="Remove All Enrolled Participants"
+                    message={`Are you sure you want to remove all enrolled delegates from "${itemToClear.name}"? This will unassign everyone and make the enrolled count 0.`}
+                    confirmText="Remove All (Reset to 0)"
+                    cancelText="Cancel"
+                    variant="danger"
+                    isLoading={isClearing}
+                    onConfirm={handleClearItemEnrollments}
+                    onClose={() => { if (!isClearing) setItemToClear(null); }}
+                />
+            )}
         </Card>
     );
 };
 
 const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTriggerSelection }) => {
-    const { state, globalSearchTerm, globalFilters } = useFirebase();
+    const { state, globalSearchTerm, globalFilters, updateParticipant } = useFirebase();
     const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
+    const [participantToClear, setParticipantToClear] = useState<Participant | null>(null);
+    const [isClearing, setIsClearing] = useState(false);
 
     const filteredParticipants = useMemo(() => {
         if (!state) return [];
@@ -667,6 +791,27 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
             return matchesSearch && matchesTeam && matchesCategory;
         }).sort((a,b) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
     }, [state, globalSearchTerm, globalFilters]);
+
+    const handleClearParticipantPrograms = async () => {
+        if (!participantToClear) return;
+        setIsClearing(true);
+        try {
+            const cleared: Participant = {
+                ...participantToClear,
+                itemIds: [],
+                itemGroups: {},
+                groupLeaderItemIds: [],
+                groupChestNumbers: {}
+            };
+            await updateParticipant(cleared);
+            setParticipantToClear(null);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to clear delegate programs.");
+        } finally {
+            setIsClearing(false);
+        }
+    };
 
     if (!state) return null;
 
@@ -688,7 +833,21 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
                                         <div className="text-[8px] font-black uppercase tracking-widest text-zinc-500 max-w-[100px] truncate">{team?.name}</div>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedParticipant(p)} className="p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 focus-within:opacity-100 bg-zinc-50 dark:bg-white/5 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:scale-110"><Edit3 size={18} /></button>
+                                <div className="flex items-center gap-1.5">
+                                    {p.itemIds.length > 0 && (
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setParticipantToClear(p); }} 
+                                            title="Remove all enrolled programmes and make it zero" 
+                                            className="p-2 rounded-xl transition-all bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/50 hover:scale-105 flex items-center gap-1 shadow-sm"
+                                        >
+                                            <UserMinus size={16} />
+                                            <span className="text-[9px] font-black uppercase tracking-wider hidden sm:inline-block">Clear (0)</span>
+                                        </button>
+                                    )}
+                                    <button onClick={() => setSelectedParticipant(p)} title="Manage Delegate Programs" className="p-2 rounded-xl transition-all bg-zinc-50 dark:bg-white/5 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:scale-110">
+                                        <Edit3 size={18} />
+                                    </button>
+                                </div>
                             </div>
                             <h4 className="font-black text-amazio-primary dark:text-white text-lg uppercase tracking-tight leading-tight mb-2 truncate">{p.name}</h4>
                             <div className={`inline-block px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border ${theme.border} ${theme.bg} ${theme.text}`}>{category?.name}</div>
@@ -697,12 +856,34 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
                                     <div className={`w-2 h-2 rounded-full ${p.itemIds.length > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-200'}`}></div>
                                     <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{p.itemIds.length} Events Registry</span>
                                 </div>
+                                {p.itemIds.length > 0 && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setParticipantToClear(p); }}
+                                        className="text-[9px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                        title="Remove all enrolled programs (Reset to 0)"
+                                    >
+                                        <Trash2 size={12}/> Reset to 0
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
             {selectedParticipant && <ParticipantManagementModal isOpen={!!selectedParticipant} onClose={() => setSelectedParticipant(null)} participant={selectedParticipant} />}
+            {participantToClear && (
+                <ConfirmModal 
+                    isOpen={!!participantToClear}
+                    title="Remove All Enrolled Programmes"
+                    message={`Are you sure you want to remove all ${participantToClear.itemIds.length} enrolled programmes for "${participantToClear.name}" (#${participantToClear.chestNumber})? This will make their enrolled count 0.`}
+                    confirmText="Remove All (Reset to 0)"
+                    cancelText="Cancel"
+                    variant="danger"
+                    isLoading={isClearing}
+                    onConfirm={handleClearParticipantPrograms}
+                    onClose={() => { if (!isClearing) setParticipantToClear(null); }}
+                />
+            )}
         </Card>
     );
 };

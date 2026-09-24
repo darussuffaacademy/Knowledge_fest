@@ -781,14 +781,14 @@ const CodeRegistry: React.FC = () => {
         const trimmed = inputValue.trim().toUpperCase().substring(0, 1);
         if (!trimmed || !/^[A-Z0-9]$/.test(trimmed)) { alert("Enter a character."); return; }
         if (allCodes.some(c => c.code === trimmed)) { alert("Registered."); return; }
-        addCodeLetter({ code: trimmed, type: 'General' });
+        addCodeLetter({ id: `c_${trimmed}_${Date.now()}`, code: trimmed, type: 'General' });
         setInputValue('');
     };
 
     const handleBulkAdd = async (type: 'AZ' | '09') => {
         const chars = type === 'AZ' ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" : "0123456789";
         const existing = new Set(allCodes.map(c => c.code));
-        const newCodes = chars.split('').filter(c => !existing.has(c)).map(c => ({ code: c, type: 'General' as const }));
+        const newCodes = chars.split('').filter(c => !existing.has(c)).map((c, idx) => ({ id: `c_${c}_${Date.now()}_${idx}`, code: c, type: 'General' as const }));
         if (newCodes.length > 0) await addMultipleCodeLetters(newCodes as CodeLetter[]);
         setShowPresets(false);
     };
@@ -818,8 +818,8 @@ const CodeRegistry: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-5 xl:grid-cols-7 gap-3 overflow-y-auto flex-grow custom-scrollbar p-1">
-                    {allCodes.map(c => (
-                        <div key={c.id} className="relative group aspect-square">
+                    {allCodes.map((c, index) => (
+                        <div key={c.id || `code_${c.code || index}_${index}`} className="relative group aspect-square">
                             <div onClick={() => { const s = new Set(lotCodes); if(s.has(c.code)) s.delete(c.code); else s.add(c.code); updateLotPool(Array.from(s).sort()); }} className={`w-full h-full rounded-2xl flex items-center justify-center font-black text-3xl border cursor-pointer select-none transition-all duration-500 ${lotCodes.has(c.code) ? 'bg-emerald-500 text-white border-emerald-600 shadow-lg scale-[1.05]' : 'bg-white dark:bg-zinc-900/40 text-zinc-300 dark:text-zinc-600 border-zinc-100 dark:border-white/5 hover:border-zinc-300'}`}>{c.code}</div>
                             <button onClick={(e) => { e.stopPropagation(); deleteCodeLetter(c.id); }} className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-20"><X size={10} strokeWidth={4}/></button>
                         </div>

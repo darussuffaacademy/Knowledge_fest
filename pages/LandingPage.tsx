@@ -76,13 +76,28 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
         else toggleTheme('light');
     };
 
+    const homeConfig = settings.homePage || {};
+    const badgeText = homeConfig.badgeText !== undefined ? homeConfig.badgeText : 'The Rooted Tree';
+    const editionText = homeConfig.editionText !== undefined ? homeConfig.editionText : '2026 EDITION';
+    const heroTitle = homeConfig.heroTitle || settings.branding?.eventName || 'AMAZIO';
+    const heroQuote = homeConfig.heroQuote !== undefined ? homeConfig.heroQuote : '"Where Art Meets Orchestration"';
+    const heroDescription = homeConfig.heroDescription !== undefined ? homeConfig.heroDescription : 'Welcome to the official management terminal for the Art Fest. Explore live results, schedules, and the creative studio through our public channels.';
+    const portalTitle = homeConfig.portalTitle || 'Operator Access';
+    const portalSubtitle = homeConfig.portalSubtitle || 'Secure Core Authentication';
+    const showStats = homeConfig.showStats !== false;
+    const showLiveDashboardBtn = homeConfig.showLiveDashboardBtn !== false;
+    const showLiveProjectorBtn = homeConfig.showLiveProjectorBtn !== false;
+    const showCreativeStudioBtn = homeConfig.showCreativeStudioBtn !== false;
+    const customHeroBannerUrl = homeConfig.customHeroBannerUrl;
+
     const logoUrl = useMemo(() => {
+        if (customHeroBannerUrl) return customHeroBannerUrl;
         if (!settings.branding) return null;
         const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         const { typographyUrl, typographyUrlLight, typographyUrlDark } = settings.branding;
         if (isDark) return typographyUrlDark || typographyUrl;
         return typographyUrlLight || typographyUrl;
-    }, [settings.branding, theme]);
+    }, [settings.branding, theme, customHeroBannerUrl]);
 
     const landingStats = useMemo(() => {
         if (!state) return { participants: 0, declared: 0, items: 0, scheduled: 0 };
@@ -114,11 +129,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
                 <div className="max-w-5xl mx-auto px-6 flex justify-between items-center">
                     <div className="flex items-center gap-4 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                         {logoUrl ? (
-                            <img src={logoUrl} alt="AMAZIO" className="h-10 w-auto object-contain transition-all" />
+                            <img src={logoUrl} alt={heroTitle} className="h-10 w-auto object-contain transition-all" />
                         ) : (
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-[#C21D2E] flex items-center justify-center font-slab text-xl font-black shadow-2xl text-white transform rotate-3">A</div>
-                                <span className="text-2xl font-black tracking-tighter uppercase hidden sm:block text-[#C21D2E] dark:text-white">AMAZIO</span>
+                                <div className="w-10 h-10 rounded-2xl bg-[#C21D2E] flex items-center justify-center font-slab text-xl font-black shadow-2xl text-white transform rotate-3">
+                                    {heroTitle.charAt(0) || 'A'}
+                                </div>
+                                <span className="text-2xl font-black tracking-tighter uppercase hidden sm:block text-[#C21D2E] dark:text-white">{heroTitle}</span>
                             </div>
                         )}
                     </div>
@@ -137,7 +154,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
                              </button>
                         ) : (
                             <a href="#portal" className="px-8 py-3 bg-[#C21D2E] dark:bg-white text-white dark:text-[#C21D2E] rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-[#C21D2E]/30">
-                                Operator Access
+                                {portalTitle}
                             </a>
                         )}
                     </div>
@@ -147,77 +164,96 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
             <section className="relative z-10 pt-48 pb-32 px-6">
                 <div className="max-w-5xl mx-auto text-center">
                     <div className="inline-flex flex-col items-center animate-in fade-in slide-in-from-bottom-6 duration-700">
-                        <div className="inline-flex items-center gap-3 px-6 py-2 bg-white/40 dark:bg-[#F9B344]/10 backdrop-blur-md rounded-full border border-[#C21D2E]/10 dark:border-[#F9B344]/20 mb-8 shadow-sm">
-                            <TreePine size={18} className="text-[#C21D2E] dark:text-[#F9B344]" />
-                            <span className="text-[12px] font-black uppercase tracking-with-[0.5em] text-[#C21D2E] dark:text-[#F9B344]">The Rooted Tree</span>
-                        </div>
+                        {badgeText && (
+                            <div className="inline-flex items-center gap-3 px-6 py-2 bg-white/40 dark:bg-[#F9B344]/10 backdrop-blur-md rounded-full border border-[#C21D2E]/10 dark:border-[#F9B344]/20 mb-8 shadow-sm">
+                                <TreePine size={18} className="text-[#C21D2E] dark:text-[#F9B344]" />
+                                <span className="text-[12px] font-black uppercase tracking-with-[0.5em] text-[#C21D2E] dark:text-[#F9B344]">{badgeText}</span>
+                            </div>
+                        )}
                         
                         <div className="relative mb-8">
                             {logoUrl ? (
-                                /* FIX: Fixed syntax error in img tag by adding missing brackets */
                                 <img src={logoUrl} 
-                                alt="AMAZIO" 
+                                alt={heroTitle} 
                                 className="h-auto max-h-48 md:max-h-72 w-auto object-contain filter drop-shadow-2xl hover:scale-[1.02] transition-all duration-700 select-none" 
                                 />
                             ) : (
                                 <h1 className="text-7xl md:text-[14vh] font-black leading-none tracking-tighter uppercase text-[#C21D2E] dark:text-white drop-shadow-xl select-none">
-                                    AMAZIO
+                                    {heroTitle}
                                 </h1>
                             )}
                         </div>
 
-                        <div className="inline-block px-10 py-3 bg-[#F9B344] text-[#C21D2E] rounded-full text-sm font-black uppercase tracking-[0.4em] shadow-lg mb-12">
-                            2026 EDITION
-                        </div>
+                        {editionText && (
+                            <div className="inline-block px-10 py-3 bg-[#F9B344] text-[#C21D2E] rounded-full text-sm font-black uppercase tracking-[0.4em] shadow-lg mb-12">
+                                {editionText}
+                            </div>
+                        )}
                     </div>
                     
-                    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
-                        <p className="text-[#C21D2E] dark:text-[#F9B344] text-2xl md:text-4xl font-bold italic tracking-tight leading-snug">
-                            "Where Art Meets Orchestration"
-                        </p>
-                        <p className="text-[#12A89D] dark:text-[#F9B344] text-base md:text-lg font-normal max-w-2xl mx-auto leading-relaxed opacity-80 font-sans">
-                            Welcome to the official management terminal for the Art Fest. Explore live results, schedules, and the creative studio through our public channels.
-                        </p>
-                    </div>
+                    {(heroQuote || heroDescription) && (
+                        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-300">
+                            {heroQuote && (
+                                <p className="text-[#C21D2E] dark:text-[#F9B344] text-2xl md:text-4xl font-bold italic tracking-tight leading-snug">
+                                    {heroQuote}
+                                </p>
+                            )}
+                            {heroDescription && (
+                                <p className="text-[#12A89D] dark:text-[#F9B344] text-base md:text-lg font-normal max-w-2xl mx-auto leading-relaxed opacity-80 font-sans">
+                                    {heroDescription}
+                                </p>
+                            )}
+                        </div>
+                    )}
 
-                    <div className="flex flex-wrap justify-center gap-4 mt-16 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-500">
-                        <button 
-                            onClick={() => navigateTo(TABS.DASHBOARD)} 
-                            className="px-10 py-6 bg-[#C21D2E] dark:bg-[#F9B344] text-white dark:text-[#C21D2E] rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs flex items-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-[#C21D2E]/40 dark:shadow-[#F9B344]/30"
-                        >
-                            <LayoutDashboard size={20} /> Live Dashboard
-                        </button>
-                        <button 
-                            onClick={() => navigateTo(TABS.PROJECTOR)} 
-                            className="px-10 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs flex items-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-indigo-600/30"
-                        >
-                            <Monitor size={20} /> Live Projector
-                        </button>
-                        <button 
-                            onClick={() => navigateTo(TABS.CREATIVE_STUDIO)} 
-                            className="px-10 py-6 bg-white/40 dark:bg-white/5 border-2 border-[#C21D2E]/10 dark:border-[#F9B344]/20 text-[#C21D2E] dark:text-white rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs hover:bg-white dark:hover:bg-white/10 transition-all backdrop-blur-xl flex items-center gap-4"
-                        >
-                            <Palette size={20} /> Creative Studio
-                        </button>
-                    </div>
+                    {(showLiveDashboardBtn || showLiveProjectorBtn || showCreativeStudioBtn) && (
+                        <div className="flex flex-wrap justify-center gap-4 mt-16 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-500">
+                            {showLiveDashboardBtn && (
+                                <button 
+                                    onClick={() => navigateTo(TABS.DASHBOARD)} 
+                                    className="px-10 py-6 bg-[#C21D2E] dark:bg-[#F9B344] text-white dark:text-[#C21D2E] rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs flex items-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-[#C21D2E]/40 dark:shadow-[#F9B344]/30"
+                                >
+                                    <LayoutDashboard size={20} /> Live Dashboard
+                                </button>
+                            )}
+                            {showLiveProjectorBtn && (
+                                <button 
+                                    onClick={() => navigateTo(TABS.PROJECTOR)} 
+                                    className="px-10 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs flex items-center gap-4 hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-indigo-600/30"
+                                >
+                                    <Monitor size={20} /> Live Projector
+                                </button>
+                            )}
+                            {showCreativeStudioBtn && (
+                                <button 
+                                    onClick={() => navigateTo(TABS.CREATIVE_STUDIO)} 
+                                    className="px-10 py-6 bg-white/40 dark:bg-white/5 border-2 border-[#C21D2E]/10 dark:border-[#F9B344]/20 text-[#C21D2E] dark:text-white rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs hover:bg-white dark:hover:bg-white/10 transition-all backdrop-blur-xl flex items-center gap-4"
+                                >
+                                    <Palette size={20} /> Creative Studio
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </section>
 
-            <section className="relative z-10 max-w-5xl mx-auto px-6 py-32 border-t border-[#C21D2E]/5 dark:border-white/5">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                    <LandingStatCard icon={Users} title="Delegates" value={landingStats.participants} colorClass="bg-emerald-500" />
-                    <LandingStatCard icon={Trophy} title="Declared" value={landingStats.declared} colorClass="bg-rose-500" />
-                    <LandingStatCard icon={BookOpen} title="Events" value={landingStats.items} colorClass="bg-amber-500" />
-                    <LandingStatCard icon={Calendar} title="Scheduled" value={landingStats.scheduled} colorClass="bg-indigo-500" />
-                </div>
-            </section>
+            {showStats && (
+                <section className="relative z-10 max-w-5xl mx-auto px-6 py-32 border-t border-[#C21D2E]/5 dark:border-white/5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        <LandingStatCard icon={Users} title="Delegates" value={landingStats.participants} colorClass="bg-emerald-500" />
+                        <LandingStatCard icon={Trophy} title="Declared" value={landingStats.declared} colorClass="bg-rose-500" />
+                        <LandingStatCard icon={BookOpen} title="Events" value={landingStats.items} colorClass="bg-amber-500" />
+                        <LandingStatCard icon={Calendar} title="Scheduled" value={landingStats.scheduled} colorClass="bg-indigo-500" />
+                    </div>
+                </section>
+            )}
 
             <section id="portal" className="relative z-10 max-w-5xl mx-auto px-6 py-48 text-center flex flex-col items-center">
                 <div className="max-w-md w-full">
                     <div className="mb-16">
                         <div className="w-16 h-1 bg-[#F9B344] mx-auto mb-6 rounded-full"></div>
-                        <h2 className="text-5xl font-black uppercase tracking-tighter mb-4 text-[#C21D2E] dark:text-white">Operator Access</h2>
-                        <p className="text-[#12A89D] dark:text-[#F9B344] font-bold uppercase tracking-[0.3em] text-[10px]">Secure Core Authentication</p>
+                        <h2 className="text-5xl font-black uppercase tracking-tighter mb-4 text-[#C21D2E] dark:text-white">{portalTitle}</h2>
+                        <p className="text-[#12A89D] dark:text-[#F9B344] font-bold uppercase tracking-[0.3em] text-[10px]">{portalSubtitle}</p>
                     </div>
 
                     {isUnassigned ? (
@@ -301,8 +337,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
 
             <footer className="relative z-10 py-20 border-t border-[#C21D2E]/5 dark:border-white/5">
                 <div className="max-w-5xl mx-auto px-6 text-center">
-                    <p className="text-[#C21D2E] dark:text-white text-lg font-black uppercase tracking-tighter">AMAZIO 2026</p>
-                    <p className="text-[#12A89D] dark:text-[#F9B344] text-[10px] font-black uppercase tracking-[0.4em] mt-2">The Rooted Tree • Art Fest Edition</p>
+                    <p className="text-[#C21D2E] dark:text-white text-lg font-black uppercase tracking-tighter">{heroTitle} {editionText}</p>
+                    <p className="text-[#12A89D] dark:text-[#F9B344] text-[10px] font-black uppercase tracking-[0.4em] mt-2">{badgeText ? `${badgeText} • ` : ''}Art Fest Edition</p>
                 </div>
             </footer>
         </div>
