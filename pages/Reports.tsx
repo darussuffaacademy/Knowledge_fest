@@ -33,9 +33,20 @@ const ReportsPage: React.FC = () => {
   const filteredParticipants = useMemo(() => {
       if (!state) return [];
       const itemTypeFilter = globalFilters.itemType || [];
+      const hasGZoneSelected = globalFilters.categoryId.some(catId => {
+          const c = state.categories.find(cat => cat.id === catId);
+          return c && (c.isGeneralCategory || /g[\s_-]?zone|general/i.test(c.name));
+      });
+
       return state.participants.filter(p => {
             const teamMatch = globalFilters.teamId.length === 0 || globalFilters.teamId.includes(p.teamId);
-            const categoryMatch = globalFilters.categoryId.length === 0 || globalFilters.categoryId.includes(p.categoryId);
+            const categoryMatch = globalFilters.categoryId.length === 0 || 
+                hasGZoneSelected ||
+                globalFilters.categoryId.includes(p.categoryId) ||
+                p.itemIds.some(id => {
+                    const item = state.items.find(i => i.id === id);
+                    return item && globalFilters.categoryId.includes(item.categoryId);
+                });
             if (!teamMatch || !categoryMatch) return false;
 
             const relevantItems = p.itemIds.map(id => state.items.find(i => i.id === id)).filter(Boolean) as Item[];
@@ -644,7 +655,17 @@ const ReportsPage: React.FC = () => {
     state.categories.forEach(cat => {
         const catItems = state.items.filter(i => i.categoryId === cat.id && (globalFilters.itemType.length === 0 || globalFilters.itemType.some(t => t.toLowerCase() === (i.type || '').toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name));
         if (catItems.length === 0) return;
-        const catParticipants = filteredParticipants.filter(p => p.categoryId === cat.id);
+        
+        const isGZone = !!cat.isGeneralCategory || /g[\s_-]?zone|general/i.test(cat.name);
+        const catItemIds = new Set(catItems.map(i => i.id));
+        const catParticipants = filteredParticipants.filter(p => {
+            if (isGZone) {
+                // Encompass all participants from both Sub-Zone and High-Zone tiers
+                return true;
+            }
+            return p.categoryId === cat.id || p.itemIds.some(id => catItemIds.has(id));
+        }).sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true }));
+
         if (catParticipants.length === 0) return;
         
         html += `
@@ -664,14 +685,19 @@ const ReportsPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        ${catParticipants.map(p => `
-                            <tr>
-                                <td class="participant-name-cell">${p.chestNumber} - ${p.name}</td>
-                                ${catItems.map(item => `
-                                    <td>${p.itemIds.includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
-                                `).join('')}
-                            </tr>
-                        `).join('')}
+                        ${catParticipants.map(p => {
+                            const isExternalCat = p.categoryId !== cat.id;
+                            const extCatName = isExternalCat ? state.categories.find(c => c.id === p.categoryId)?.name : null;
+                            const catBadge = extCatName ? `<span style="font-size: 8px; font-weight: 700; opacity: 0.7; margin-left: 4px; color: #6366f1;">(${extCatName})</span>` : '';
+                            return `
+                                <tr>
+                                    <td class="participant-name-cell">${p.chestNumber} - ${p.name}${catBadge}</td>
+                                    ${catItems.map(item => `
+                                        <td>${p.itemIds.includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
+                                    `).join('')}
+                                </tr>
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
