@@ -48,6 +48,16 @@ export interface GeneralFontConfig extends FontConfig {
     id: string;
 }
 
+export interface FestivalEdition {
+    id: string;
+    editionNumber: number;
+    name: string;
+    year: string | number;
+    createdAt?: string;
+    description?: string;
+    isArchived?: boolean;
+}
+
 export interface CanvasElement {
     id: string;
     type: 'text' | 'image' | 'shape';
@@ -327,4 +337,6 @@ export interface AppState {
   judges: Judge[];
   users: User[];
   permissions: { [key in UserRole]: string[] };
+  editions?: FestivalEdition[];
+  activeEditionId?: string;
 }

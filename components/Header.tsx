@@ -103,6 +103,7 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
             case TABS.GENERAL_SETTINGS:
                 return [
                     { id: 'details', label: 'Event Details', icon: Info, active: settingsSubView === 'details', onClick: () => setSettingsSubView('details') },
+                    { id: 'editions', label: 'Editions', icon: Milestone, active: settingsSubView === 'editions', onClick: () => setSettingsSubView('editions') },
                     { id: 'display', label: 'Display & Layout', icon: Palette, active: settingsSubView === 'display', onClick: () => setSettingsSubView('display') },
                     { id: 'users', label: 'Users & Access', icon: Users, active: settingsSubView === 'users', onClick: () => setSettingsSubView('users') },
                     { id: 'instructions', label: 'Instructions', icon: BookText, active: settingsSubView === 'instructions', onClick: () => setSettingsSubView('instructions') },
@@ -145,6 +146,13 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
                                 {isOnline ? <Wifi size={10}/> : <WifiOff size={10}/>}
                                 <span className="hidden xs:inline">{isOnline ? 'Synced' : 'Offline'}</span>
                             </div>
+
+                            {state?.editions && (
+                                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
+                                    <Milestone size={10} className="text-indigo-500" />
+                                    <span>{state.editions.find(e => e.id === state.activeEditionId)?.name || 'Edition 1'}</span>
+                                </div>
+                            )}
                         </div>
 
                         {hasSubNavigation && (

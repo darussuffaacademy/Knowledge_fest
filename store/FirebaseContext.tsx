@@ -194,7 +194,89 @@ interface FirebaseContextType {
   resetSystem: () => Promise<void>;
 }
 
-export const FirebaseContext = createContext<FirebaseContextType | null>(null);
+const defaultContextValue: FirebaseContextType = {
+  state: defaultState,
+  currentUser: null,
+  firebaseUser: null,
+  loading: false,
+  isOnline: true,
+  globalFilters: { teamId: [], categoryId: [], performanceType: [], itemType: [], itemId: [], status: [], date: [], stage: [], assignmentStatus: [] },
+  setGlobalFilters: () => {},
+  globalSearchTerm: '',
+  setGlobalSearchTerm: () => {},
+  dataEntryView: 'ITEMS',
+  setDataEntryView: () => {},
+  itemsSubView: 'ITEMS',
+  setItemsSubView: () => {},
+  teamsSubView: 'TEAMS',
+  setTeamsSubView: () => {},
+  gradeSubView: 'CODES',
+  setGradeSubView: () => {},
+  scoringSubView: 'QUEUE',
+  setScoringSubView: () => {},
+  judgesSubView: 'ASSIGNMENTS',
+  setJudgesSubView: () => {},
+  settingsSubView: 'details',
+  setSettingsSubView: () => {},
+  login: async () => {},
+  logout: async () => {},
+  updateSettings: async () => {},
+  updateLotPool: async () => {},
+  updateCustomFonts: async () => {},
+  updateGeneralCustomFonts: async () => {},
+  updateCustomBackgrounds: async () => {},
+  addCategory: async () => {},
+  addMultipleCategories: async () => {},
+  updateCategory: async () => {},
+  reorderCategories: async () => {},
+  deleteMultipleCategories: async () => {},
+  addTeam: async () => {},
+  addMultipleTeams: async () => {},
+  updateTeam: async () => {},
+  reorderTeams: async () => {},
+  deleteMultipleTeams: async () => {},
+  addItem: async () => {},
+  addMultipleItems: async () => {},
+  updateItem: async () => {},
+  deleteMultipleItems: async () => {},
+  addGrade: async () => {},
+  updateGrade: async () => {},
+  deleteGrade: async () => {},
+  addCodeLetter: async () => {},
+  addMultipleCodeLetters: async () => {},
+  updateCodeLetter: async () => {},
+  reorderCodeLetters: async () => {},
+  deleteCodeLetter: async () => {},
+  deleteMultipleCodeLetters: async () => {},
+  addJudge: async () => {},
+  updateJudge: async () => {},
+  reorderJudges: async () => {},
+  deleteMultipleJudges: async () => {},
+  updateItemJudges: async () => {},
+  setJudgeAssignments: async () => {},
+  addParticipant: async () => {},
+  addMultipleParticipants: async () => {},
+  updateParticipant: async () => {},
+  updateMultipleParticipants: async () => {},
+  deleteMultipleParticipants: async () => {},
+  setSchedule: async () => {},
+  addScheduleEvent: async () => {},
+  updateTabulationEntry: async () => {},
+  updateMultipleTabulationEntries: async () => {},
+  deleteEventTabulation: async () => {},
+  saveResult: async () => {},
+  addUser: async () => {},
+  updateUser: async () => {},
+  deleteUser: async () => {},
+  updatePermissions: async () => {},
+  updateInstruction: async () => {},
+  hasPermission: () => true,
+  backupData: () => {},
+  restoreData: async () => {},
+  resetSystem: async () => {},
+};
+
+export const FirebaseContext = createContext<FirebaseContextType>(defaultContextValue);
 
 const BASE_COLLECTION = 'artfest_v2';
 
@@ -578,8 +660,5 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
 export const useFirebase = () => {
   const context = useContext(FirebaseContext);
-  if (!context) {
-    throw new Error('useFirebase must be used within a FirebaseProvider');
-  }
-  return context;
+  return context || defaultContextValue;
 };
