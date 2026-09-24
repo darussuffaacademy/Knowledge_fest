@@ -3,12 +3,12 @@ import {
     Filter, GraduationCap, Info, Layers, Layout, ListFilter, 
     PieChart, Search, SearchX, Trophy, User, Users, Zap, 
     Check, TrendingUp, BookOpen, UserCheck, ArrowUpRight,
-    MapPin, X, ExternalLink, ArrowUp, ArrowDown
+    MapPin, X, ExternalLink, ArrowUp, ArrowDown, RotateCcw, AlertTriangle, ShieldAlert, Loader2
 } from 'lucide-react';
 import React, { useMemo, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useFirebase } from '../hooks/useFirebase';
-import { ItemType, PerformanceType, ResultStatus } from '../types';
+import { ItemType, PerformanceType, ResultStatus, UserRole } from '../types';
 
 // --- Helper Components & Utils ---
 
@@ -101,10 +101,16 @@ const DetailModal: React.FC<{
 };
 
 const PointsPage: React.FC = () => {
-    const { state, globalSearchTerm, globalFilters } = useFirebase();
+    const { state, globalSearchTerm, globalFilters, resetPoints, currentUser } = useFirebase();
     const [viewMode, setViewMode] = useState<'STANDINGS' | 'ITEMS' | 'PARTICIPANTS'>('STANDINGS');
     const [viewFilter, setViewFilter] = useState<'BOTH' | 'RANK' | 'GRADE'>('BOTH');
     
+    // Reset Points Modal State
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
+    const [confirmPhrase, setConfirmPhrase] = useState('');
+    const [notification, setNotification] = useState<string | null>(null);
+
     // Selection for Modals
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
     const [selectedParticipant, setSelectedParticipant] = useState<any | null>(null);
@@ -350,26 +356,75 @@ const PointsPage: React.FC = () => {
     const toggleCat = (tid: string, cid: string) => setExpandedCategories(prev => { const key = `${tid}-${cid}`; const n = new Set(prev); if(n.has(key)) n.delete(key); else n.add(key); return n; });
     const toggleItem = (tid: string, cid: string, iid: string) => setExpandedItems(prev => { const key = `${tid}-${cid}-${iid}`; const n = new Set(prev); if(n.has(key)) n.delete(key); else n.add(key); return n; });
 
+    const handleResetPoints = async () => {
+        setIsResetting(true);
+        try {
+            await resetPoints();
+            setIsResetModalOpen(false);
+            setConfirmPhrase('');
+            setNotification('All festival points and results have been successfully reset to 0.');
+            setTimeout(() => setNotification(null), 5000);
+        } catch (err) {
+            console.error('Failed to reset points:', err);
+            alert('Failed to reset points. Please try again.');
+        } finally {
+            setIsResetting(false);
+        }
+    };
+
     return (
         <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-500 pb-24">
+            {/* Notification Alert */}
+            {notification && (
+                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 flex items-center justify-between shadow-sm animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3">
+                        <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider">{notification}</span>
+                    </div>
+                    <button onClick={() => setNotification(null)} className="p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-lg text-emerald-600 dark:text-emerald-400">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
             {/* Header */}
             <div className="hidden md:flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div>
                     <h2 className="text-5xl font-black font-serif text-amazio-primary dark:text-white tracking-tighter uppercase leading-none">Point Tallies</h2>
                     <p className="text-zinc-500 dark:text-zinc-400 mt-3 font-medium text-lg italic">Global standings and contribution analysis.</p>
                 </div>
-                <div className="flex bg-white/40 dark:bg-black/20 p-1.5 rounded-2xl border border-amazio-primary/5 shadow-inner">
-                    <button onClick={() => setViewMode('STANDINGS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'STANDINGS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>Leaderboard</button>
-                    <button onClick={() => setViewMode('ITEMS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'ITEMS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>By Item</button>
-                    <button onClick={() => setViewMode('PARTICIPANTS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'PARTICIPANTS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>By Participant</button>
+                <div className="flex items-center gap-3">
+                    <div className="flex bg-white/40 dark:bg-black/20 p-1.5 rounded-2xl border border-amazio-primary/5 shadow-inner">
+                        <button onClick={() => setViewMode('STANDINGS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'STANDINGS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>Leaderboard</button>
+                        <button onClick={() => setViewMode('ITEMS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'ITEMS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>By Item</button>
+                        <button onClick={() => setViewMode('PARTICIPANTS')} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'PARTICIPANTS' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}>By Participant</button>
+                    </div>
+                    <button
+                        onClick={() => { setConfirmPhrase(''); setIsResetModalOpen(true); }}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95 group shrink-0"
+                        title="Reset all festival points & declared results"
+                    >
+                        <RotateCcw size={14} className="group-hover:-rotate-90 transition-transform duration-300" />
+                        <span>Reset Points</span>
+                    </button>
                 </div>
             </div>
 
-            {/* Mobile View Toggles */}
-            <div className="md:hidden flex bg-white/40 dark:bg-black/20 p-1 rounded-xl border border-amazio-primary/5">
-                <button onClick={() => setViewMode('STANDINGS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'STANDINGS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>Stats</button>
-                <button onClick={() => setViewMode('ITEMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'ITEMS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>Items</button>
-                <button onClick={() => setViewMode('PARTICIPANTS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'PARTICIPANTS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>People</button>
+            {/* Mobile View Toggles & Reset Button */}
+            <div className="md:hidden flex items-center gap-2">
+                <div className="flex-1 flex bg-white/40 dark:bg-black/20 p-1 rounded-xl border border-amazio-primary/5">
+                    <button onClick={() => setViewMode('STANDINGS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'STANDINGS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>Stats</button>
+                    <button onClick={() => setViewMode('ITEMS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'ITEMS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>Items</button>
+                    <button onClick={() => setViewMode('PARTICIPANTS')} className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg ${viewMode === 'PARTICIPANTS' ? 'bg-indigo-600 text-white shadow-md' : 'text-zinc-500'}`}>People</button>
+                </div>
+                <button
+                    onClick={() => { setConfirmPhrase(''); setIsResetModalOpen(true); }}
+                    className="p-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 rounded-xl text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0"
+                    title="Reset points"
+                >
+                    <RotateCcw size={14} />
+                    <span className="text-[9px] font-bold uppercase">Reset</span>
+                </button>
             </div>
 
             {/* Stats Overview */}
@@ -687,6 +742,101 @@ const PointsPage: React.FC = () => {
                     </div>
                 </div>
             </DetailModal>
+
+            {/* Reset Points Confirmation Modal */}
+            {isResetModalOpen && ReactDOM.createPortal(
+                <div 
+                    className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" 
+                    onClick={() => !isResetting && setIsResetModalOpen(false)}
+                >
+                    <div 
+                        className="bg-white dark:bg-[#141614] w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-rose-100 dark:border-rose-900/30 overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]" 
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="p-6 sm:p-7 bg-rose-50/60 dark:bg-rose-950/20 border-b border-rose-100/60 dark:border-rose-900/20 flex justify-between items-start">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-lg shadow-rose-500/20 shrink-0">
+                                    <RotateCcw size={24} />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-black uppercase text-rose-600 dark:text-rose-400 tracking-widest bg-rose-100/80 dark:bg-rose-900/50 px-2 py-0.5 rounded-md">Safety Action</span>
+                                    </div>
+                                    <h3 className="text-xl font-black font-serif uppercase tracking-tight text-zinc-900 dark:text-white mt-1">Reset Points</h3>
+                                </div>
+                            </div>
+                            <button 
+                                disabled={isResetting} 
+                                onClick={() => setIsResetModalOpen(false)} 
+                                className="p-2 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-xl transition-colors text-zinc-400 disabled:opacity-40"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 sm:p-8 space-y-5 overflow-y-auto custom-scrollbar">
+                            {/* Stats Impact Preview */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 block mb-1">Current Points</span>
+                                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400 tabular-nums">{analytics.stats.totalPoints}</span>
+                                    <span className="text-[10px] text-zinc-400 block mt-0.5">Will become 0</span>
+                                </div>
+                                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-100 dark:border-zinc-800">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 block mb-1">Declared Results</span>
+                                    <span className="text-2xl font-black text-zinc-700 dark:text-zinc-300 tabular-nums">{analytics.stats.updatedCount} items</span>
+                                    <span className="text-[10px] text-zinc-400 block mt-0.5">Will be cleared</span>
+                                </div>
+                            </div>
+
+                            <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/30 text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+                                <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-amber-700 dark:text-amber-400">
+                                    <AlertTriangle size={14} /> Confirmation Details:
+                                </div>
+                                <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300 font-medium">
+                                    This operation will clear all published/declared competition results. All team standings, rank tallies, and individual points across the leaderboard, live projector screen, and merit list will reset to zero.
+                                </p>
+                                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide pt-1">
+                                    ✓ Participants, teams, items, and schedule entries remain completely safe and untouched.
+                                </p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    disabled={isResetting}
+                                    onClick={() => setIsResetModalOpen(false)}
+                                    className="flex-1 py-3.5 px-4 rounded-2xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isResetting}
+                                    onClick={handleResetPoints}
+                                    className="flex-1 py-3.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {isResetting ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            <span>Resetting...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RotateCcw size={16} />
+                                            <span>Yes, Reset Points</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

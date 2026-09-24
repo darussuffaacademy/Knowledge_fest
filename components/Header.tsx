@@ -30,6 +30,7 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
     
     const { 
         state, isOnline, setGlobalFilters, globalSearchTerm, setGlobalSearchTerm, 
+        activeEdition, activeEditionId, editions, switchEdition,
         dataEntryView, setDataEntryView,
         itemsSubView, setItemsSubView,
         teamsSubView, setTeamsSubView,
@@ -103,7 +104,6 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
             case TABS.GENERAL_SETTINGS:
                 return [
                     { id: 'details', label: 'Event Details', icon: Info, active: settingsSubView === 'details', onClick: () => setSettingsSubView('details') },
-                    { id: 'editions', label: 'Editions', icon: Milestone, active: settingsSubView === 'editions', onClick: () => setSettingsSubView('editions') },
                     { id: 'display', label: 'Display & Layout', icon: Palette, active: settingsSubView === 'display', onClick: () => setSettingsSubView('display') },
                     { id: 'users', label: 'Users & Access', icon: Users, active: settingsSubView === 'users', onClick: () => setSettingsSubView('users') },
                     { id: 'instructions', label: 'Instructions', icon: BookText, active: settingsSubView === 'instructions', onClick: () => setSettingsSubView('instructions') },
@@ -142,17 +142,21 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
                             )}
                             <h1 onClick={onTitleClick} className="text-sm md:text-lg font-black font-serif text-amazio-primary dark:text-white tracking-tight truncate cursor-pointer hover:opacity-80 transition-opacity">{displayTitle}</h1>
                             
-                            <div className={`hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ml-2 border ${isOnline ? 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900' : 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/30 dark:border-rose-900'}`}>
+                            {activeEdition && (
+                                <div 
+                                    onClick={() => setSettingsSubView('details')}
+                                    className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 shadow-sm cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                                    title="Active Festival Edition • Click to view in Settings"
+                                >
+                                    <Layers size={10} className="text-indigo-600 dark:text-indigo-400" />
+                                    <span>Edition {activeEdition.editionNumber} • {activeEdition.year}</span>
+                                </div>
+                            )}
+
+                            <div className={`hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ml-1 border ${isOnline ? 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900' : 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/30 dark:border-rose-900'}`}>
                                 {isOnline ? <Wifi size={10}/> : <WifiOff size={10}/>}
                                 <span className="hidden xs:inline">{isOnline ? 'Synced' : 'Offline'}</span>
                             </div>
-
-                            {state?.editions && (
-                                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50">
-                                    <Milestone size={10} className="text-indigo-500" />
-                                    <span>{state.editions.find(e => e.id === state.activeEditionId)?.name || 'Edition 1'}</span>
-                                </div>
-                            )}
                         </div>
 
                         {hasSubNavigation && (

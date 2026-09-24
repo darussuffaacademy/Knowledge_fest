@@ -8,9 +8,9 @@ import {
     ShieldAlert, Award, Edit2, Save, Type, CheckCircle, CheckCircle2, ClipboardList, Plus, FileText, 
     MoreHorizontal, Settings, Palette, Calendar, SlidersHorizontal, MousePointer2, 
     UserCheck, Shield, LayoutDashboard, UserPlus, Medal, Gavel, Timer, Monitor,
-    BarChart2, Home, Search, AlertTriangle, ShieldCheck, Download, Sparkles, RefreshCw, Layers, Printer
+    BarChart2, Home, Search, AlertTriangle, ShieldCheck, Download, Sparkles, RefreshCw, Layers, Printer, Trophy
 } from 'lucide-react';
-import { User, UserRole, AppState, FontConfig, GeneralFontConfig, ProjectorSettings } from '../../types';
+import { User, UserRole, AppState, FontConfig, GeneralFontConfig, ProjectorSettings, Edition, ResultStatus } from '../../types';
 import { TABS, TAB_DISPLAY_NAMES } from '../../constants';
 
 // --- Helper Component: Image Upload ---
@@ -408,11 +408,26 @@ const TAB_ICON_MAP: Record<string, React.ElementType> = {
 };
 
 const GeneralSettings: React.FC = () => {
-    const { state, updateSettings, updateCustomFonts, updateGeneralCustomFonts, addUser, updateUser, deleteUser, updatePermissions, updateInstruction, backupData, restoreData, resetSystem, settingsSubView: activeTab } = useFirebase();
+    const { 
+        state, updateSettings, updateCustomFonts, updateGeneralCustomFonts, 
+        addUser, updateUser, deleteUser, updatePermissions, updateInstruction, 
+        backupData, restoreData, resetSystem, settingsSubView: activeTab,
+        activeEditionId, activeEdition, editions, switchEdition, createEdition, updateEdition, deleteEdition, currentUser
+    } = useFirebase();
     const restoreInputRef = useRef<HTMLInputElement>(null);
     const [isEditingInst, setIsEditingInst] = useState(false);
     const [instData, setInstData] = useState(state?.settings.institutionDetails || { name: '', address: '', email: '', contactNumber: '', description: '', logoUrl: '' });
     const [isEditingOrg, setIsEditingOrg] = useState(false);
+    
+    const [isAddEditionModalOpen, setIsAddEditionModalOpen] = useState(false);
+    const [isCreatingEdition, setIsCreatingEdition] = useState(false);
+    const [isSwitchingEdition, setIsSwitchingEdition] = useState<string | null>(null);
+    const [newEditionForm, setNewEditionForm] = useState({
+        name: '',
+        editionNumber: 2,
+        year: '2027',
+        copyStructure: true
+    });
     
     const [orgData, setOrgData] = useState({ 
         organizingTeam: state?.settings.organizingTeam || '', 
@@ -589,11 +604,301 @@ const GeneralSettings: React.FC = () => {
         });
     };
 
+    const handleOpenAddEditionModal = () => {
+        const nextNumber = editions.length > 0 ? Math.max(...editions.map(e => e.editionNumber)) + 1 : 2;
+        const currentYear = new Date().getFullYear();
+        setNewEditionForm({
+            name: `Amazio Arts Fest ${currentYear + 1}`,
+            editionNumber: nextNumber,
+            year: `${currentYear + 1}`,
+            copyStructure: true
+        });
+        setIsAddEditionModalOpen(true);
+    };
+
+    const handleCreateEditionSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newEditionForm.name.trim()) {
+            alert("Please enter a valid edition name.");
+            return;
+        }
+        if (!newEditionForm.editionNumber || newEditionForm.editionNumber < 1) {
+            alert("Please enter a valid edition number.");
+            return;
+        }
+        if (editions.some(ed => ed.editionNumber === Number(newEditionForm.editionNumber))) {
+            alert(`Edition ${newEditionForm.editionNumber} already exists. Please choose a different edition number.`);
+            return;
+        }
+
+        setIsCreatingEdition(true);
+        try {
+            await createEdition({
+                name: newEditionForm.name.trim(),
+                editionNumber: Number(newEditionForm.editionNumber),
+                year: newEditionForm.year,
+                copyStructure: newEditionForm.copyStructure
+            });
+            setIsAddEditionModalOpen(false);
+            alert(`Successfully created and switched to Edition ${newEditionForm.editionNumber}: "${newEditionForm.name}"!`);
+        } catch (err: any) {
+            console.error(err);
+            alert("Failed to create new edition: " + (err?.message || "Unknown error"));
+        } finally {
+            setIsCreatingEdition(false);
+        }
+    };
+
+    const handleSwitchEditionAction = async (editionId: string) => {
+        if (editionId === activeEditionId) return;
+        const target = editions.find(e => e.id === editionId);
+        if (!target) return;
+        
+        setIsSwitchingEdition(editionId);
+        try {
+            await switchEdition(editionId);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to switch edition.");
+        } finally {
+            setIsSwitchingEdition(null);
+        }
+    };
+
+    const handleDeleteEditionAction = async (editionId: string, editionName: string) => {
+        if (editionId === 'edition_1') {
+            alert("Edition 1 represents the historical baseline and cannot be deleted.");
+            return;
+        }
+        if (!confirm(`Are you sure you want to remove edition "${editionName}"? All data within this edition will be removed.`)) {
+            return;
+        }
+        try {
+            await deleteEdition(editionId);
+        } catch (err) {
+            console.error(err);
+            alert("Failed to delete edition.");
+        }
+    };
+
+    const renderFestivalEditionsCard = () => {
+        const isManager = !currentUser || currentUser.role === UserRole.MANAGER;
+
+        return (
+            <Card 
+                title="Festival Editions & Multi-Year Seasons" 
+                action={
+                    isManager ? (
+                        <button 
+                            onClick={handleOpenAddEditionModal}
+                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md shadow-indigo-600/20 hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <Plus size={15} strokeWidth={3} />
+                            <span>Add New Edition</span>
+                        </button>
+                    ) : null
+                }
+            >
+                <div className="space-y-6">
+                    {/* Active Edition Hero Card */}
+                    <div className="relative overflow-hidden rounded-3xl border border-indigo-200/80 dark:border-indigo-900/40 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 dark:from-indigo-950/30 dark:via-[#131715] dark:to-purple-950/20 p-6 md:p-7 shadow-sm">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                            <div className="space-y-3 max-w-2xl">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="px-3 py-1 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5">
+                                        <Layers size={12} />
+                                        Edition {activeEdition?.editionNumber || 1}
+                                    </div>
+                                    <div className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        Active Workspace
+                                    </div>
+                                    <span className="px-2.5 py-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-xl text-[10px] font-bold">
+                                        Year {activeEdition?.year || '2026'}
+                                    </span>
+                                </div>
+                                
+                                <div>
+                                    <h3 className="text-xl md:text-2xl font-black font-serif text-amazio-primary dark:text-white tracking-tight">
+                                        {activeEdition?.name || 'Amazio Knowledge Fest 2026'}
+                                    </h3>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 font-medium leading-relaxed">
+                                        All entries, scores, tabulation, results, schedules, and analytics in the application are currently scoped to this edition.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Switch Edition Control */}
+                            <div className="flex-shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white dark:bg-zinc-900/90 backdrop-blur-md p-2.5 rounded-2xl border border-indigo-100 dark:border-zinc-800 shadow-sm">
+                                <div className="px-3 py-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Switch Edition</span>
+                                    <span className="text-xs font-bold text-amazio-primary dark:text-zinc-200 truncate max-w-[140px] block">
+                                        Edition {activeEdition?.editionNumber} ({activeEdition?.year})
+                                    </span>
+                                </div>
+                                <select 
+                                    value={activeEditionId} 
+                                    onChange={(e) => handleSwitchEditionAction(e.target.value)}
+                                    disabled={!isManager || isSwitchingEdition !== null}
+                                    className="px-4 py-2 bg-indigo-50 dark:bg-zinc-800 border border-indigo-200 dark:border-zinc-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer hover:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                >
+                                    {editions.map(ed => (
+                                        <option key={ed.id} value={ed.id}>
+                                            Edition {ed.editionNumber} — {ed.name} ({ed.year}) {ed.id === activeEditionId ? '✓ Active' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Live Scoped Metrics Summary */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-indigo-100/70 dark:border-zinc-800/80">
+                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                                    <Users size={16} />
+                                </div>
+                                <div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Teams</span>
+                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.teams.length || 0}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
+                                    <UserCheck size={16} />
+                                </div>
+                                <div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Participants</span>
+                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.participants.length || 0}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
+                                    <LayoutDashboard size={16} />
+                                </div>
+                                <div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Programmes</span>
+                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.items.length || 0}</span>
+                                </div>
+                            </div>
+                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+                                    <Trophy size={16} />
+                                </div>
+                                <div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Results Declared</span>
+                                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                                        {state?.results.filter(r => r.status === ResultStatus.DECLARED).length || 0}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Available Editions Grid */}
+                    <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between px-1">
+                            <h4 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                <Sparkles size={14} className="text-indigo-500" />
+                                All Registered Editions ({editions.length})
+                            </h4>
+                            <span className="text-[10px] text-zinc-400 font-bold">
+                                Switch anytime to view historical or upcoming fest data
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            {editions.map((ed) => {
+                                const isActive = ed.id === activeEditionId;
+                                const isSwitchingThis = isSwitchingEdition === ed.id;
+
+                                return (
+                                    <div 
+                                        key={ed.id}
+                                        className={`p-4 md:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-4 ${
+                                            isActive 
+                                                ? 'bg-white dark:bg-[#141815] border-indigo-500/60 dark:border-indigo-500/50 shadow-sm ring-1 ring-indigo-500/20' 
+                                                : 'bg-zinc-50/60 dark:bg-[#111412]/60 border-zinc-200/80 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700'
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-start gap-3">
+                                                <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-zinc-300 dark:bg-zinc-700'}`} />
+                                                <div>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                                            Edition {ed.editionNumber}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-zinc-400">• Year {ed.year}</span>
+                                                        {ed.id === 'edition_1' && (
+                                                            <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-[8px] font-black uppercase tracking-wider border border-amber-200/50 dark:border-amber-900/40">
+                                                                Historical Base
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <h4 className="text-sm md:text-base font-bold text-amazio-primary dark:text-white mt-1">
+                                                        {ed.name}
+                                                    </h4>
+                                                </div>
+                                            </div>
+
+                                            {isActive && (
+                                                <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1 flex-shrink-0">
+                                                    <Check size={11} strokeWidth={3} />
+                                                    Current
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/60 mt-auto text-[10px]">
+                                            <span className="text-zinc-400 font-medium">
+                                                {isActive ? 'Workspace is currently active' : 'Independent dataset isolated'}
+                                            </span>
+
+                                            <div className="flex items-center gap-2">
+                                                {!isActive && isManager && (
+                                                    <button 
+                                                        onClick={() => handleSwitchEditionAction(ed.id)}
+                                                        disabled={isSwitchingThis}
+                                                        className="px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-indigo-600 hover:text-white text-amazio-primary dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5"
+                                                    >
+                                                        {isSwitchingThis ? (
+                                                            <RefreshCw size={11} className="animate-spin" />
+                                                        ) : (
+                                                            <RotateCcw size={11} />
+                                                        )}
+                                                        <span>Switch Edition</span>
+                                                    </button>
+                                                )}
+
+                                                {!isActive && ed.id !== 'edition_1' && isManager && (
+                                                    <button 
+                                                        onClick={() => handleDeleteEditionAction(ed.id, ed.name)}
+                                                        className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all"
+                                                        title="Delete Edition"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </Card>
+        );
+    };
+
     const renderTabContent = () => {
         switch(activeTab) {
             case 'details':
                 return (
                     <div className="space-y-10 animate-in slide-in-from-left duration-500">
+                        {/* Festival Editions Management */}
+                        {renderFestivalEditionsCard()}
+
                         {/* Institution Core */}
                         <Card title="Institution Core" action={isEditingInst ? <button onClick={handleSaveInst} className="p-2 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors"><Check size={20}/></button> : <button onClick={() => setIsEditingInst(true)} className="p-2 text-zinc-400 hover:text-indigo-500 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-lg transition-colors"><Edit2 size={18}/></button>}>
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1392,6 +1697,132 @@ const GeneralSettings: React.FC = () => {
                 teams={state.teams}
                 judges={state.judges}
             />
+
+            {/* Add New Festival Edition Modal */}
+            {isAddEditionModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-[#151816] rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">
+                                    <Layers size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black font-serif text-amazio-primary dark:text-white uppercase tracking-tight">
+                                        Add New Festival Edition
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">Initialize a new, isolated year/season environment.</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setIsAddEditionModalOpen(false)}
+                                disabled={isCreatingEdition}
+                                className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-xl hover:bg-zinc-100 dark:hover:bg-white/5 transition-all"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateEditionSubmit} className="p-6 space-y-5">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                        Edition Number *
+                                    </label>
+                                    <input 
+                                        type="number"
+                                        min="1"
+                                        required
+                                        value={newEditionForm.editionNumber}
+                                        onChange={e => setNewEditionForm({...newEditionForm, editionNumber: parseInt(e.target.value) || 1})}
+                                        placeholder="e.g. 2"
+                                        className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                        Festival Year *
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        required
+                                        value={newEditionForm.year}
+                                        onChange={e => setNewEditionForm({...newEditionForm, year: e.target.value})}
+                                        placeholder="e.g. 2027"
+                                        className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                    Edition Name *
+                                </label>
+                                <input 
+                                    type="text"
+                                    required
+                                    value={newEditionForm.name}
+                                    onChange={e => setNewEditionForm({...newEditionForm, name: e.target.value})}
+                                    placeholder="e.g. Amazio Arts Fest 2027"
+                                    className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
+                                />
+                            </div>
+
+                            <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl space-y-3">
+                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox"
+                                        checked={newEditionForm.copyStructure}
+                                        onChange={e => setNewEditionForm({...newEditionForm, copyStructure: e.target.checked})}
+                                        className="mt-1 w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500"
+                                    />
+                                    <div>
+                                        <span className="text-xs font-black text-indigo-900 dark:text-indigo-200 block">
+                                            Pre-load Structural Master Data
+                                        </span>
+                                        <span className="text-[11px] text-indigo-700/80 dark:text-indigo-300/70 block leading-relaxed mt-0.5">
+                                            Copies teams, categories, programme items, and grade points from current workspace to save initial setup time.
+                                        </span>
+                                    </div>
+                                </label>
+                                
+                                <div className="p-3 bg-white/80 dark:bg-black/40 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                                    <strong className="text-indigo-600 dark:text-indigo-400">Data Isolation Guarantee:</strong> Individual participant entries, marks, scores, tabulation ledger, and final results will ALWAYS start clean (0 points) for complete isolation.
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <button 
+                                    type="button"
+                                    disabled={isCreatingEdition}
+                                    onClick={() => setIsAddEditionModalOpen(false)}
+                                    className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isCreatingEdition}
+                                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-xl shadow-indigo-600/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isCreatingEdition ? (
+                                        <>
+                                            <RefreshCw size={14} className="animate-spin" />
+                                            <span>Creating Edition...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Plus size={14} strokeWidth={3} />
+                                            <span>Create Edition & Activate</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

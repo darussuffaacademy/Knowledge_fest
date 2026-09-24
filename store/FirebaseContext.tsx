@@ -192,6 +192,7 @@ interface FirebaseContextType {
   backupData: () => void;
   restoreData: (file: File) => Promise<void>;
   resetSystem: () => Promise<void>;
+  resetPoints: () => Promise<void>;
 }
 
 const defaultContextValue: FirebaseContextType = {
@@ -274,6 +275,7 @@ const defaultContextValue: FirebaseContextType = {
   backupData: () => {},
   restoreData: async () => {},
   resetSystem: async () => {},
+  resetPoints: async () => {},
 };
 
 export const FirebaseContext = createContext<FirebaseContextType>(defaultContextValue);
@@ -648,6 +650,10 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
             console.error("Reset failed:", err);
             alert("Failed to reset system.");
         }
+    },
+    resetPoints: async () => {
+        if (!state) return;
+        await writeDoc('results', []);
     }
   };
 
