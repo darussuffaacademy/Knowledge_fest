@@ -8,10 +8,24 @@ import {
     ShieldAlert, Award, Edit2, Save, Type, CheckCircle, CheckCircle2, ClipboardList, Plus, FileText, 
     MoreHorizontal, Settings, Palette, Calendar, SlidersHorizontal, MousePointer2, 
     UserCheck, Shield, LayoutDashboard, UserPlus, Medal, Gavel, Timer, Monitor,
-    BarChart2, Home, Search, AlertTriangle, ShieldCheck, Download, Sparkles, RefreshCw, Layers, Printer, Trophy
+    BarChart2, Home, Search, AlertTriangle, ShieldCheck, Download, Sparkles, RefreshCw, Layers, Printer, Trophy,
+    Archive, History, ExternalLink, ChevronRight
 } from 'lucide-react';
 import { User, UserRole, AppState, FontConfig, GeneralFontConfig, ProjectorSettings, Edition, ResultStatus } from '../../types';
 import { TABS, TAB_DISPLAY_NAMES } from '../../constants';
+
+// Roman numeral helper for prestige festival edition numbering
+const toRoman = (num: number): string => {
+    const lookup: Record<string, number> = { M: 1000, CM: 900, D: 500, CD: 400, C: 100, XC: 90, L: 50, XL: 40, X: 10, IX: 9, V: 5, IV: 4, I: 1 };
+    let roman = '';
+    for (const i in lookup) {
+        while (num >= lookup[i]) {
+            roman += i;
+            num -= lookup[i];
+        }
+    }
+    return roman || `${num}`;
+};
 
 // --- Helper Component: Image Upload ---
 interface ImageUploadProps {
@@ -334,8 +348,8 @@ const UserFormModal: React.FC<{
                             <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Assigned Entity</label>
                             <select value={assignedEntity} onChange={e => setAssignedEntity(e.target.value)} className="w-full p-4 rounded-2xl bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 text-sm font-bold outline-none appearance-none cursor-pointer">
                                 <option value="">-- Select Entity --</option>
-                                {role === UserRole.TEAM_LEADER && teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                {role === UserRole.JUDGE && judges.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+                                {role === UserRole.TEAM_LEADER && (teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                {role === UserRole.JUDGE && (judges || []).map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
                             </select>
                         </div>
                     )}
@@ -420,13 +434,23 @@ const GeneralSettings: React.FC = () => {
     const [isEditingOrg, setIsEditingOrg] = useState(false);
     
     const [isAddEditionModalOpen, setIsAddEditionModalOpen] = useState(false);
+    const [isEditEditionModalOpen, setIsEditEditionModalOpen] = useState(false);
+    const [editingEditionTarget, setEditingEditionTarget] = useState<Edition | null>(null);
     const [isCreatingEdition, setIsCreatingEdition] = useState(false);
+    const [isUpdatingEdition, setIsUpdatingEdition] = useState(false);
     const [isSwitchingEdition, setIsSwitchingEdition] = useState<string | null>(null);
+    const [editionSearchQuery, setEditionSearchQuery] = useState('');
+    const [editionFilterTab, setEditionFilterTab] = useState<'all' | 'active' | 'archived'>('all');
     const [newEditionForm, setNewEditionForm] = useState({
         name: '',
         editionNumber: 2,
         year: '2027',
         copyStructure: true
+    });
+    const [editEditionForm, setEditEditionForm] = useState({
+        name: '',
+        year: '2026',
+        isArchived: false
     });
     
     const [orgData, setOrgData] = useState({ 
@@ -605,7 +629,7 @@ const GeneralSettings: React.FC = () => {
     };
 
     const handleOpenAddEditionModal = () => {
-        const nextNumber = editions.length > 0 ? Math.max(...editions.map(e => e.editionNumber)) + 1 : 2;
+        const nextNumber = (editions || []).length > 0 ? Math.max(...(editions || []).map(e => e.editionNumber)) + 1 : 2;
         const currentYear = new Date().getFullYear();
         setNewEditionForm({
             name: `Amazio Arts Fest ${currentYear + 1}`,
@@ -681,70 +705,166 @@ const GeneralSettings: React.FC = () => {
         }
     };
 
+    const handleOpenEditEditionModal = (ed: Edition) => {
+        setEditingEditionTarget(ed);
+        setEditEditionForm({
+            name: ed.name,
+            year: String(ed.year || '2026'),
+            isArchived: !!ed.isArchived
+        });
+        setIsEditEditionModalOpen(true);
+    };
+
+    const handleUpdateEditionSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingEditionTarget) return;
+        if (!editEditionForm.name.trim()) {
+            alert("Please enter a valid edition name.");
+            return;
+        }
+
+        setIsUpdatingEdition(true);
+        try {
+            await updateEdition({
+                ...editingEditionTarget,
+                name: editEditionForm.name.trim(),
+                year: editEditionForm.year.trim(),
+                isArchived: editEditionForm.isArchived
+            });
+            setIsEditEditionModalOpen(false);
+            setEditingEditionTarget(null);
+        } catch (err: any) {
+            console.error(err);
+            alert("Failed to update edition: " + (err?.message || "Unknown error"));
+        } finally {
+            setIsUpdatingEdition(false);
+        }
+    };
+
+    const handleToggleArchiveEdition = async (ed: Edition) => {
+        if (ed.id === activeEditionId && !ed.isArchived) {
+            if (!confirm(`Edition ${ed.editionNumber} is currently active. Archiving it marks it as historical. Are you sure?`)) {
+                return;
+            }
+        }
+        try {
+            await updateEdition({
+                ...ed,
+                isArchived: !ed.isArchived
+            });
+        } catch (err: any) {
+            console.error(err);
+            alert("Failed to update archive status.");
+        }
+    };
+
     const renderFestivalEditionsCard = () => {
         const isManager = !currentUser || currentUser.role === UserRole.MANAGER;
+        const allEditions = editions || [];
+        const activeCount = allEditions.filter(e => !e.isArchived).length;
+        const archivedCount = allEditions.filter(e => e.isArchived).length;
+
+        // Filter editions based on search query and active tab
+        const filteredEditions = allEditions.filter(ed => {
+            const q = editionSearchQuery.trim().toLowerCase();
+            const matchesQuery = !q || 
+                ed.name.toLowerCase().includes(q) || 
+                String(ed.editionNumber).includes(q) || 
+                toRoman(ed.editionNumber).toLowerCase().includes(q) ||
+                String(ed.year).toLowerCase().includes(q);
+
+            if (!matchesQuery) return false;
+
+            if (editionFilterTab === 'active') return !ed.isArchived;
+            if (editionFilterTab === 'archived') return !!ed.isArchived;
+            return true;
+        }).sort((a, b) => b.editionNumber - a.editionNumber);
 
         return (
             <Card 
                 title="Festival Editions & Multi-Year Seasons" 
                 action={
                     isManager ? (
-                        <button 
-                            onClick={handleOpenAddEditionModal}
-                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md shadow-indigo-600/20 hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                            <Plus size={15} strokeWidth={3} />
-                            <span>Add New Edition</span>
-                        </button>
+                        <div className="flex items-center gap-2.5">
+                            <button 
+                                onClick={handleOpenAddEditionModal}
+                                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-md shadow-indigo-600/20 hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                <Plus size={15} strokeWidth={3} />
+                                <span>Add New Edition</span>
+                            </button>
+                        </div>
                     ) : null
                 }
             >
                 <div className="space-y-6">
                     {/* Active Edition Hero Card */}
-                    <div className="relative overflow-hidden rounded-3xl border border-indigo-200/80 dark:border-indigo-900/40 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 dark:from-indigo-950/30 dark:via-[#131715] dark:to-purple-950/20 p-6 md:p-7 shadow-sm">
+                    <div className="relative overflow-hidden rounded-3xl border border-indigo-200/90 dark:border-indigo-900/50 bg-gradient-to-br from-indigo-50/90 via-white to-purple-50/50 dark:from-indigo-950/40 dark:via-[#121614] dark:to-purple-950/30 p-6 md:p-8 shadow-sm">
+                        {/* Subtle background luxury watermark */}
+                        <div className="absolute -right-6 -bottom-10 text-[110px] font-black font-serif text-indigo-900/[0.04] dark:text-white/[0.03] select-none pointer-events-none tracking-tighter">
+                            {toRoman(activeEdition?.editionNumber || 1)}
+                        </div>
+
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-                            <div className="space-y-3 max-w-2xl">
+                            <div className="space-y-3.5 max-w-2xl">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <div className="px-3 py-1 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5">
-                                        <Layers size={12} />
-                                        Edition {activeEdition?.editionNumber || 1}
+                                    <div className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5">
+                                        <Layers size={13} />
+                                        <span>Edition {toRoman(activeEdition?.editionNumber || 1)} ({activeEdition?.editionNumber || 1})</span>
                                     </div>
-                                    <div className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                                    <div className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
                                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        Active Workspace
+                                        <span>Active Live Workspace</span>
                                     </div>
-                                    <span className="px-2.5 py-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-xl text-[10px] font-bold">
-                                        Year {activeEdition?.year || '2026'}
+                                    <span className="px-3 py-1.5 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-xl text-[10px] font-bold">
+                                        Festival Year {activeEdition?.year || '2026'}
                                     </span>
+                                    {activeEdition?.isArchived && (
+                                        <span className="px-2.5 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-[10px] font-bold flex items-center gap-1">
+                                            <Archive size={11} />
+                                            Archived Season
+                                        </span>
+                                    )}
                                 </div>
                                 
                                 <div>
-                                    <h3 className="text-xl md:text-2xl font-black font-serif text-amazio-primary dark:text-white tracking-tight">
-                                        {activeEdition?.name || 'Amazio Knowledge Fest 2026'}
-                                    </h3>
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 font-medium leading-relaxed">
-                                        All entries, scores, tabulation, results, schedules, and analytics in the application are currently scoped to this edition.
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-xl md:text-2xl font-black font-serif text-amazio-primary dark:text-white tracking-tight">
+                                            {activeEdition?.name || 'Amazio Knowledge Fest 2026'}
+                                        </h3>
+                                        {isManager && activeEdition && (
+                                            <button 
+                                                onClick={() => handleOpenEditEditionModal(activeEdition)}
+                                                className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-zinc-800 rounded-xl transition-all"
+                                                title="Edit Season Details"
+                                            >
+                                                <Edit2 size={15} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1.5 font-medium leading-relaxed">
+                                        All entries, scores, jury evaluations, tabulation, results, schedules, and analytics in the application are currently scoped exclusively to this edition.
                                     </p>
                                 </div>
                             </div>
 
-                            {/* Switch Edition Control */}
-                            <div className="flex-shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white dark:bg-zinc-900/90 backdrop-blur-md p-2.5 rounded-2xl border border-indigo-100 dark:border-zinc-800 shadow-sm">
+                            {/* Fast Switch & Management Controls */}
+                            <div className="flex-shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md p-3 rounded-2xl border border-indigo-100 dark:border-zinc-800 shadow-sm">
                                 <div className="px-3 py-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Switch Edition</span>
-                                    <span className="text-xs font-bold text-amazio-primary dark:text-zinc-200 truncate max-w-[140px] block">
-                                        Edition {activeEdition?.editionNumber} ({activeEdition?.year})
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Switch Workspace</span>
+                                    <span className="text-xs font-bold text-amazio-primary dark:text-zinc-200 truncate max-w-[160px] block">
+                                        Edition {activeEdition?.editionNumber} · {activeEdition?.year}
                                     </span>
                                 </div>
                                 <select 
                                     value={activeEditionId} 
                                     onChange={(e) => handleSwitchEditionAction(e.target.value)}
                                     disabled={!isManager || isSwitchingEdition !== null}
-                                    className="px-4 py-2 bg-indigo-50 dark:bg-zinc-800 border border-indigo-200 dark:border-zinc-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer hover:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
+                                    className="px-4 py-2.5 bg-indigo-50/80 dark:bg-zinc-800 border border-indigo-200 dark:border-zinc-700 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer hover:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 transition-all disabled:opacity-50"
                                 >
-                                    {editions.map(ed => (
+                                    {allEditions.map(ed => (
                                         <option key={ed.id} value={ed.id}>
-                                            Edition {ed.editionNumber} — {ed.name} ({ed.year}) {ed.id === activeEditionId ? '✓ Active' : ''}
+                                            Edition {ed.editionNumber} ({toRoman(ed.editionNumber)}) — {ed.name} [{ed.year}] {ed.id === activeEditionId ? '✓ Active' : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -752,139 +872,285 @@ const GeneralSettings: React.FC = () => {
                         </div>
 
                         {/* Live Scoped Metrics Summary */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-indigo-100/70 dark:border-zinc-800/80">
-                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
-                                    <Users size={16} />
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-indigo-100/80 dark:border-zinc-800/80">
+                            <div className="bg-white/85 dark:bg-zinc-900/60 p-4 rounded-2xl border border-indigo-100/70 dark:border-zinc-800 flex items-center gap-3.5 transition-all hover:border-indigo-200 dark:hover:border-zinc-700">
+                                <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+                                    <Users size={17} />
                                 </div>
                                 <div>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Teams</span>
-                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.teams.length || 0}</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Enrolled Teams</span>
+                                    <span className="text-lg font-black text-amazio-primary dark:text-white">{state?.teams?.length || 0}</span>
                                 </div>
                             </div>
-                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">
-                                    <UserCheck size={16} />
+                            <div className="bg-white/85 dark:bg-zinc-900/60 p-4 rounded-2xl border border-indigo-100/70 dark:border-zinc-800 flex items-center gap-3.5 transition-all hover:border-indigo-200 dark:hover:border-zinc-700">
+                                <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+                                    <UserCheck size={17} />
                                 </div>
                                 <div>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Participants</span>
-                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.participants.length || 0}</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Delegates Rostered</span>
+                                    <span className="text-lg font-black text-amazio-primary dark:text-white">{state?.participants?.length || 0}</span>
                                 </div>
                             </div>
-                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
-                                    <LayoutDashboard size={16} />
+                            <div className="bg-white/85 dark:bg-zinc-900/60 p-4 rounded-2xl border border-indigo-100/70 dark:border-zinc-800 flex items-center gap-3.5 transition-all hover:border-indigo-200 dark:hover:border-zinc-700">
+                                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                                    <LayoutDashboard size={17} />
                                 </div>
                                 <div>
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Programmes</span>
-                                    <span className="text-base font-black text-amazio-primary dark:text-white">{state?.items.length || 0}</span>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Fest Programmes</span>
+                                    <span className="text-lg font-black text-amazio-primary dark:text-white">{state?.items?.length || 0}</span>
                                 </div>
                             </div>
-                            <div className="bg-white/80 dark:bg-zinc-900/50 p-3.5 rounded-2xl border border-indigo-100/60 dark:border-zinc-800 flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
-                                    <Trophy size={16} />
+                            <div className="bg-white/85 dark:bg-zinc-900/60 p-4 rounded-2xl border border-indigo-100/70 dark:border-zinc-800 flex items-center gap-3.5 transition-all hover:border-indigo-200 dark:hover:border-zinc-700">
+                                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                                    <Trophy size={17} />
                                 </div>
                                 <div>
                                     <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Results Declared</span>
-                                    <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                                        {state?.results.filter(r => r.status === ResultStatus.DECLARED).length || 0}
+                                    <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                                        {(state?.results || []).filter(r => r.status === ResultStatus.DECLARED).length}
                                     </span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Available Editions Grid */}
-                    <div className="space-y-3 pt-2">
-                        <div className="flex items-center justify-between px-1">
-                            <h4 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                                <Sparkles size={14} className="text-indigo-500" />
-                                All Registered Editions ({editions.length})
-                            </h4>
-                            <span className="text-[10px] text-zinc-400 font-bold">
-                                Switch anytime to view historical or upcoming fest data
-                            </span>
-                        </div>
+                    {/* Directory & Management Controls Toolbar */}
+                    <div className="space-y-4 pt-2">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
+                            <div className="flex items-center gap-2.5">
+                                <Sparkles size={16} className="text-indigo-500" />
+                                <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                                    All Registered Editions ({allEditions.length})
+                                </h4>
+                                <span className="text-zinc-300 dark:text-zinc-700 font-bold">·</span>
+                                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                                    {activeCount} active · {archivedCount} archived
+                                </span>
+                            </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                            {editions.map((ed) => {
-                                const isActive = ed.id === activeEditionId;
-                                const isSwitchingThis = isSwitchingEdition === ed.id;
-
-                                return (
-                                    <div 
-                                        key={ed.id}
-                                        className={`p-4 md:p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-4 ${
-                                            isActive 
-                                                ? 'bg-white dark:bg-[#141815] border-indigo-500/60 dark:border-indigo-500/50 shadow-sm ring-1 ring-indigo-500/20' 
-                                                : 'bg-zinc-50/60 dark:bg-[#111412]/60 border-zinc-200/80 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700'
+                            {/* Search & Segmented Filter Bar */}
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                {/* Filter Tabs Segmented Control */}
+                                <div className="flex items-center bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200/80 dark:border-zinc-800 text-xs">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setEditionFilterTab('all')}
+                                        className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                                            editionFilterTab === 'all' 
+                                                ? 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                                                : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                                         }`}
                                     >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex items-start gap-3">
-                                                <div className={`mt-1 w-2.5 h-2.5 rounded-full flex-shrink-0 ${isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-zinc-300 dark:bg-zinc-700'}`} />
-                                                <div>
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                                                            Edition {ed.editionNumber}
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-zinc-400">• Year {ed.year}</span>
+                                        All ({allEditions.length})
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setEditionFilterTab('active')}
+                                        className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                                            editionFilterTab === 'active' 
+                                                ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                                                : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                                        }`}
+                                    >
+                                        Active ({activeCount})
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setEditionFilterTab('archived')}
+                                        className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition-all ${
+                                            editionFilterTab === 'archived' 
+                                                ? 'bg-white dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-sm' 
+                                                : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                                        }`}
+                                    >
+                                        Archived ({archivedCount})
+                                    </button>
+                                </div>
+
+                                {/* Real-time Search Input */}
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                                    <input 
+                                        type="text" 
+                                        value={editionSearchQuery}
+                                        onChange={(e) => setEditionSearchQuery(e.target.value)}
+                                        placeholder="Search editions..."
+                                        className="pl-8.5 pr-8 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-medium text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all w-44 sm:w-56"
+                                    />
+                                    {editionSearchQuery && (
+                                        <button 
+                                            onClick={() => setEditionSearchQuery('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Available Editions Grid */}
+                        {filteredEditions.length === 0 ? (
+                            <div className="p-8 text-center bg-zinc-50/50 dark:bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                                <Layers size={28} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-2" />
+                                <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400">No festival editions match your filters.</p>
+                                <button 
+                                    onClick={() => { setEditionSearchQuery(''); setEditionFilterTab('all'); }}
+                                    className="mt-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                                >
+                                    Reset search filters
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {filteredEditions.map((ed) => {
+                                    const isActive = ed.id === activeEditionId;
+                                    const isSwitchingThis = isSwitchingEdition === ed.id;
+
+                                    return (
+                                        <div 
+                                            key={ed.id}
+                                            className={`p-5 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-4.5 ${
+                                                isActive 
+                                                    ? 'bg-white dark:bg-[#141815] border-indigo-500/70 dark:border-indigo-500/60 shadow-md ring-1 ring-indigo-500/20' 
+                                                    : 'bg-zinc-50/80 dark:bg-[#111412]/80 border-zinc-200 dark:border-zinc-800/80 hover:border-indigo-200 dark:hover:border-zinc-700 hover:shadow-sm'
+                                            }`}
+                                        >
+                                            <div className="space-y-2.5">
+                                                {/* Header row with badges */}
+                                                <div className="flex items-start justify-between gap-2.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-serif font-black text-xs ${
+                                                            isActive 
+                                                                ? 'bg-indigo-600 text-white shadow-sm' 
+                                                                : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                                                        }`}>
+                                                            {toRoman(ed.editionNumber)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                                                    Edition {ed.editionNumber}
+                                                                </span>
+                                                                <span className="text-zinc-300 dark:text-zinc-700 font-bold">·</span>
+                                                                <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                                                                    Year {ed.year}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        {isActive && (
+                                                            <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                                                                <Check size={11} strokeWidth={3} />
+                                                                <span>Current</span>
+                                                            </span>
+                                                        )}
+                                                        {ed.isArchived && (
+                                                            <span className="px-2 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                                                <Archive size={10} />
+                                                                <span>Archived</span>
+                                                            </span>
+                                                        )}
                                                         {ed.id === 'edition_1' && (
-                                                            <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-[8px] font-black uppercase tracking-wider border border-amber-200/50 dark:border-amber-900/40">
+                                                            <span className="px-2 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-[9px] font-black uppercase tracking-wider border border-blue-200/60 dark:border-blue-900/40">
                                                                 Historical Base
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <h4 className="text-sm md:text-base font-bold text-amazio-primary dark:text-white mt-1">
+                                                </div>
+
+                                                {/* Title & info */}
+                                                <div>
+                                                    <h4 className="text-base font-bold text-amazio-primary dark:text-white tracking-tight">
                                                         {ed.name}
                                                     </h4>
+                                                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                                                        {isActive 
+                                                            ? 'Active live workspace for tabulation and scoring' 
+                                                            : ed.isArchived 
+                                                                ? 'Preserved historical dataset archive' 
+                                                                : 'Independent multi-year season ready for activation'}
+                                                    </p>
                                                 </div>
                                             </div>
 
-                                            {isActive && (
-                                                <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1 flex-shrink-0">
-                                                    <Check size={11} strokeWidth={3} />
-                                                    Current
-                                                </span>
-                                            )}
-                                        </div>
+                                            {/* Action bar */}
+                                            <div className="flex items-center justify-between pt-3.5 border-t border-zinc-100 dark:border-zinc-800/60 mt-auto text-[10px]">
+                                                <div>
+                                                    {isActive ? (
+                                                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 text-[11px]">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                            Active Workspace
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-zinc-400 font-medium">
+                                                            {ed.isArchived ? 'Historical Archive' : 'Standalone Season'}
+                                                        </span>
+                                                    )}
+                                                </div>
 
-                                        <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/60 mt-auto text-[10px]">
-                                            <span className="text-zinc-400 font-medium">
-                                                {isActive ? 'Workspace is currently active' : 'Independent dataset isolated'}
-                                            </span>
+                                                <div className="flex items-center gap-2">
+                                                    {/* Switch Button */}
+                                                    {!isActive && isManager && (
+                                                        <button 
+                                                            onClick={() => handleSwitchEditionAction(ed.id)}
+                                                            disabled={isSwitchingThis}
+                                                            className="px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-indigo-600 hover:text-white text-amazio-primary dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                                                        >
+                                                            {isSwitchingThis ? (
+                                                                <RefreshCw size={11} className="animate-spin" />
+                                                            ) : (
+                                                                <RotateCcw size={11} />
+                                                            )}
+                                                            <span>Switch Season</span>
+                                                        </button>
+                                                    )}
 
-                                            <div className="flex items-center gap-2">
-                                                {!isActive && isManager && (
-                                                    <button 
-                                                        onClick={() => handleSwitchEditionAction(ed.id)}
-                                                        disabled={isSwitchingThis}
-                                                        className="px-3 py-1.5 bg-white dark:bg-zinc-800 hover:bg-indigo-600 hover:text-white text-amazio-primary dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5"
-                                                    >
-                                                        {isSwitchingThis ? (
-                                                            <RefreshCw size={11} className="animate-spin" />
-                                                        ) : (
-                                                            <RotateCcw size={11} />
-                                                        )}
-                                                        <span>Switch Edition</span>
-                                                    </button>
-                                                )}
+                                                    {/* Edit Button */}
+                                                    {isManager && (
+                                                        <button 
+                                                            onClick={() => handleOpenEditEditionModal(ed)}
+                                                            className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-xl transition-all"
+                                                            title="Edit Edition Information"
+                                                        >
+                                                            <Edit2 size={13} />
+                                                        </button>
+                                                    )}
 
-                                                {!isActive && ed.id !== 'edition_1' && isManager && (
-                                                    <button 
-                                                        onClick={() => handleDeleteEditionAction(ed.id, ed.name)}
-                                                        className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all"
-                                                        title="Delete Edition"
-                                                    >
-                                                        <Trash2 size={13} />
-                                                    </button>
-                                                )}
+                                                    {/* Archive Toggle Button */}
+                                                    {isManager && (
+                                                        <button 
+                                                            onClick={() => handleToggleArchiveEdition(ed)}
+                                                            className={`p-1.5 rounded-xl transition-all ${
+                                                                ed.isArchived 
+                                                                    ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30' 
+                                                                    : 'text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:bg-white/5'
+                                                            }`}
+                                                            title={ed.isArchived ? "Unarchive Season" : "Archive Season"}
+                                                        >
+                                                            <Archive size={13} />
+                                                        </button>
+                                                    )}
+
+                                                    {/* Delete Button */}
+                                                    {!isActive && ed.id !== 'edition_1' && isManager && (
+                                                        <button 
+                                                            onClick={() => handleDeleteEditionAction(ed.id, ed.name)}
+                                                            className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all"
+                                                            title="Delete Edition"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
             </Card>
@@ -1019,7 +1285,7 @@ const GeneralSettings: React.FC = () => {
                                         <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1 flex items-center gap-2">Main Event Dates <Calendar size={12}/></label>
                                         <div className={`w-full p-2 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl ${!isEditingOrg ? 'opacity-50 pointer-events-none' : ''}`}>
                                             <div className="flex flex-wrap gap-2 mb-2">
-                                                {orgData.eventDates.map((date, idx) => (
+                                                {(orgData.eventDates || []).map((date, idx) => (
                                                     <div key={idx} className="flex items-center gap-2 pl-3 pr-2 py-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-lg text-xs font-bold text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700">
                                                         {date}
                                                         {isEditingOrg && (
@@ -1435,7 +1701,7 @@ const GeneralSettings: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-zinc-50 dark:divide-white/5">
-                                        {state.users.map(u => {
+                                        {(state.users || []).map(u => {
                                             const roleStyle = u.role === UserRole.MANAGER 
                                                 ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300'
                                                 : u.role === UserRole.JUDGE
@@ -1724,6 +1990,20 @@ const GeneralSettings: React.FC = () => {
                         </div>
 
                         <form onSubmit={handleCreateEditionSubmit} className="p-6 space-y-5">
+                            {/* Live Badge Preview Card */}
+                            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/20 border border-indigo-100 dark:border-indigo-900/30 space-y-2">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500 block">Preview</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                        Edition {toRoman(newEditionForm.editionNumber || 1)} ({newEditionForm.editionNumber || 1})
+                                    </span>
+                                    <span className="text-xs font-bold text-zinc-400">· {newEditionForm.year || '2027'}</span>
+                                </div>
+                                <h4 className="text-sm font-bold text-amazio-primary dark:text-white truncate">
+                                    {newEditionForm.name || 'Untitled Festival Edition'}
+                                </h4>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
@@ -1752,6 +2032,23 @@ const GeneralSettings: React.FC = () => {
                                         placeholder="e.g. 2027"
                                         className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
                                     />
+                                    {/* Quick Year Presets */}
+                                    <div className="flex items-center gap-1.5 mt-2">
+                                        {['2026', '2027', '2028', '2029'].map(yr => (
+                                            <button
+                                                key={yr}
+                                                type="button"
+                                                onClick={() => setNewEditionForm({...newEditionForm, year: yr})}
+                                                className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                                    newEditionForm.year === yr 
+                                                        ? 'bg-indigo-600 text-white' 
+                                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                                                }`}
+                                            >
+                                                {yr}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
@@ -1782,13 +2079,13 @@ const GeneralSettings: React.FC = () => {
                                             Pre-load Structural Master Data
                                         </span>
                                         <span className="text-[11px] text-indigo-700/80 dark:text-indigo-300/70 block leading-relaxed mt-0.5">
-                                            Copies teams, categories, programme items, and grade points from current workspace to save initial setup time.
+                                            Copies categories, teams, programme items, and grade points from current workspace to save initial setup time.
                                         </span>
                                     </div>
                                 </label>
                                 
                                 <div className="p-3 bg-white/80 dark:bg-black/40 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
-                                    <strong className="text-indigo-600 dark:text-indigo-400">Data Isolation Guarantee:</strong> Individual participant entries, marks, scores, tabulation ledger, and final results will ALWAYS start clean (0 points) for complete isolation.
+                                    <strong className="text-indigo-600 dark:text-indigo-400">Data Isolation Guarantee:</strong> Individual participant entries, marks, scores, tabulation ledger, and final results will ALWAYS start clean (0 points) for complete season isolation.
                                 </div>
                             </div>
 
@@ -1815,6 +2112,144 @@ const GeneralSettings: React.FC = () => {
                                         <>
                                             <Plus size={14} strokeWidth={3} />
                                             <span>Create Edition & Activate</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Festival Edition Modal */}
+            {isEditEditionModalOpen && editingEditionTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-[#151816] rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">
+                                    <Edit2 size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black font-serif text-amazio-primary dark:text-white uppercase tracking-tight">
+                                        Edit Festival Edition
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">Update naming, festival year, or archive status.</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => { setIsEditEditionModalOpen(false); setEditingEditionTarget(null); }}
+                                disabled={isUpdatingEdition}
+                                className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-xl hover:bg-zinc-100 dark:hover:bg-white/5 transition-all"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateEditionSubmit} className="p-6 space-y-5">
+                            {/* Live Badge Preview Card */}
+                            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/20 border border-indigo-100 dark:border-indigo-900/30 space-y-2">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500 block">Preview</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                        Edition {toRoman(editingEditionTarget.editionNumber)} ({editingEditionTarget.editionNumber})
+                                    </span>
+                                    <span className="text-xs font-bold text-zinc-400">· {editEditionForm.year}</span>
+                                    {editEditionForm.isArchived && (
+                                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-bold border border-amber-500/20">
+                                            Archived
+                                        </span>
+                                    )}
+                                </div>
+                                <h4 className="text-sm font-bold text-amazio-primary dark:text-white truncate">
+                                    {editEditionForm.name || 'Untitled Edition'}
+                                </h4>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                        Edition Number
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        disabled
+                                        value={`Edition ${editingEditionTarget.editionNumber} (${toRoman(editingEditionTarget.editionNumber)})`}
+                                        className="w-full p-3.5 bg-zinc-100 dark:bg-black/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold text-zinc-400 outline-none cursor-not-allowed"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                        Festival Year *
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        required
+                                        value={editEditionForm.year}
+                                        onChange={e => setEditEditionForm({...editEditionForm, year: e.target.value})}
+                                        placeholder="e.g. 2026"
+                                        className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">
+                                    Edition Official Name *
+                                </label>
+                                <input 
+                                    type="text"
+                                    required
+                                    value={editEditionForm.name}
+                                    onChange={e => setEditEditionForm({...editEditionForm, name: e.target.value})}
+                                    placeholder="e.g. Amazio Knowledge Fest 2026"
+                                    className="w-full p-3.5 bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all"
+                                />
+                            </div>
+
+                            <div className="p-4 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox"
+                                        checked={editEditionForm.isArchived}
+                                        onChange={e => setEditEditionForm({...editEditionForm, isArchived: e.target.checked})}
+                                        className="mt-1 w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500"
+                                    />
+                                    <div>
+                                        <span className="text-xs font-bold text-amazio-primary dark:text-zinc-200 block">
+                                            Mark as Archived Historical Season
+                                        </span>
+                                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block leading-relaxed mt-0.5">
+                                            Indicates that this festival edition is concluded and preserved for recordkeeping and historical comparison.
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <button 
+                                    type="button"
+                                    disabled={isUpdatingEdition}
+                                    onClick={() => { setIsEditEditionModalOpen(false); setEditingEditionTarget(null); }}
+                                    className="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isUpdatingEdition}
+                                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-xl shadow-indigo-600/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isUpdatingEdition ? (
+                                        <>
+                                            <RefreshCw size={14} className="animate-spin" />
+                                            <span>Saving Changes...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save size={14} strokeWidth={3} />
+                                            <span>Save Changes</span>
                                         </>
                                     )}
                                 </button>

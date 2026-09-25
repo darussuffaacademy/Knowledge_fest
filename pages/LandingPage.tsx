@@ -101,13 +101,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
 
     const landingStats = useMemo(() => {
         if (!state) return { participants: 0, declared: 0, items: 0, scheduled: 0 };
-        const activeItemIds = new Set(state.items.map(i => i.id));
+        const items = state.items || [];
+        const participants = state.participants || [];
+        const schedule = state.schedule || [];
+        const results = state.results || [];
+        const activeItemIds = new Set(items.map(i => i.id));
         return {
-            participants: state.participants.length,
-            items: state.items.length,
-            scheduled: state.schedule.length,
+            participants: participants.length,
+            items: items.length,
+            scheduled: schedule.length,
             // Filtering out orphaned results
-            declared: state.results.filter(r => r.status === 'Declared' && activeItemIds.has(r.itemId)).length
+            declared: results.filter(r => r.status === 'Declared' && activeItemIds.has(r.itemId)).length
         };
     }, [state]);
 

@@ -48,26 +48,27 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ setActiveTab, theme }) =>
 
   const hasJudgeAccess = useMemo(() => {
       if (!state || !currentUser || currentUser.role !== UserRole.JUDGE || !currentUser.judgeId) return () => true;
-      const myItemIds = new Set(state.judgeAssignments.filter(a => a.judgeIds.includes(currentUser.judgeId!)).map(a => a.itemId));
+      const assignments = state.judgeAssignments || [];
+      const myItemIds = new Set(assignments.filter(a => (a.judgeIds || []).includes(currentUser.judgeId!)).map(a => a.itemId));
       return (itemId: string) => myItemIds.has(itemId);
   }, [state?.judgeAssignments, currentUser]);
 
   const upcomingEvents = useMemo(() => {
     if (!state) return [];
-    return [...state.schedule].filter(s => hasJudgeAccess(s.itemId)).slice(0, 6);
+    return (state.schedule || []).filter(s => hasJudgeAccess(s.itemId)).slice(0, 6);
   }, [state?.schedule, hasJudgeAccess]);
   
   const recentResult = useMemo(() => {
     if (!state) return null;
-    const validDeclaredResults = state.results.filter(r => r.status === ResultStatus.DECLARED && hasJudgeAccess(r.itemId));
+    const validDeclaredResults = (state.results || []).filter(r => r.status === ResultStatus.DECLARED && hasJudgeAccess(r.itemId));
     const lastDeclared = validDeclaredResults[validDeclaredResults.length - 1]; 
     if (!lastDeclared) return null;
-    const item = state.items.find(i => i.id === lastDeclared.itemId);
-    const category = state.categories.find(c => c.id === lastDeclared.categoryId);
+    const item = (state.items || []).find(i => i.id === lastDeclared.itemId);
+    const category = (state.categories || []).find(c => c.id === lastDeclared.categoryId);
     if (!item || !category) return null;
-    const winners = lastDeclared.winners.sort((a, b) => (a.position || 99) - (b.position || 99)).slice(0, 5).map(winner => {
-        const p = state.participants.find(part => part.id === winner.participantId);
-        const t = p ? state.teams.find(tm => tm.id === p.teamId) : null;
+    const winners = (lastDeclared.winners || []).slice().sort((a, b) => (a.position || 99) - (b.position || 99)).slice(0, 5).map(winner => {
+        const p = (state.participants || []).find(part => part.id === winner.participantId);
+        const t = p ? (state.teams || []).find(tm => tm.id === p.teamId) : null;
         return { ...winner, participantName: p?.name || 'N/A', teamName: t?.name || 'N/A' };
     });
     return { itemName: item.name, categoryName: category.name, winners };
@@ -75,12 +76,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ setActiveTab, theme }) =>
 
   const stats = useMemo(() => {
     if (!state) return { participants: 0, teams: 0, items: 0, resultsDeclared: 0 };
-    const activeItemIds = new Set(state.items.map(i => i.id));
+    const activeItemIds = new Set((state.items || []).map(i => i.id));
     return {
-      participants: state.participants.length,
-      teams: state.teams.length,
-      items: state.items.filter(i => hasJudgeAccess(i.id)).length,
-      resultsDeclared: state.results.filter(r => 
+      participants: (state.participants || []).length,
+      teams: (state.teams || []).length,
+      items: (state.items || []).filter(i => hasJudgeAccess(i.id)).length,
+      resultsDeclared: (state.results || []).filter(r => 
         r.status === ResultStatus.DECLARED && 
         activeItemIds.has(r.itemId) && 
         hasJudgeAccess(r.itemId)
@@ -144,11 +145,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ setActiveTab, theme }) =>
                                     {ev.time}
                                 </h4>
                                 <div className="font-black text-zinc-900 dark:text-zinc-100 text-base sm:text-xl uppercase tracking-tight truncate leading-tight mb-2 sm:mb-4">
-                                    {state.items.find(i => i.id === ev.itemId)?.name}
+                                    {(state.items || []).find(i => i.id === ev.itemId)?.name}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                                     <span className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-900 text-[8px] sm:text-[10px] font-black text-zinc-500 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 uppercase tracking-widest">
-                                        {state.categories.find(c => c.id === ev.categoryId)?.name}
+                                        {(state.categories || []).find(c => c.id === ev.categoryId)?.name}
                                     </span>
                                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/20 text-[8px] sm:text-[10px] font-black text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30 uppercase tracking-widest">
                                         <MapPin size={10} sm:size={12} strokeWidth={3} /> {ev.stage}
@@ -169,7 +170,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ setActiveTab, theme }) =>
                       <h3 className="text-2xl sm:text-4xl font-black text-zinc-900 dark:text-zinc-100 mt-4 sm:mt-6 uppercase tracking-tighter leading-none">{recentResult.itemName}</h3>
                     </div>
                     <div className="space-y-2 sm:space-y-3">
-                        {recentResult.winners.map((winner, idx) => (
+                        {(recentResult.winners || []).map((winner, idx) => (
                             <div key={idx} className="flex items-center gap-4 sm:gap-5 p-3.5 sm:p-5 rounded-2xl sm:rounded-[2.5rem] bg-zinc-50 dark:bg-zinc-800/40 transition-all group/winner hover:bg-white dark:hover:bg-zinc-800 hover:shadow-md">
                                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-[1.5rem] flex items-center justify-center font-black text-base sm:text-xl ${winner.position === 1 ? 'bg-amber-400 text-amber-950 shadow-lg' : 'bg-white dark:bg-zinc-700 text-zinc-500 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-600 shadow-sm'}`}>{winner.position}</div>
                                 <div className="min-w-0 flex-grow">

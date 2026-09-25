@@ -168,8 +168,8 @@ const SchedulePage: React.FC = () => {
 
     const manualItemsGrouped = useMemo(() => {
         if (!state) return { onStage: [], offStage: [] };
-        const scheduledItemIds = new Set(state.schedule.map(s => s.itemId));
-        let items = state.items.filter(i => {
+        const scheduledItemIds = new Set((state.schedule || []).map(s => s.itemId));
+        let items = (state.items || []).filter(i => {
             if (manualEntry.categoryId && i.categoryId !== manualEntry.categoryId) return false;
             if (hideScheduled && scheduledItemIds.has(i.id)) return false;
             return true;
@@ -183,7 +183,7 @@ const SchedulePage: React.FC = () => {
 
     const processedSchedule = useMemo(() => {
         if (!state) return [];
-        let data = [...state.schedule];
+        let data = [...(state.schedule || [])];
         if (globalFilters.stage.length > 0) data = data.filter(s => globalFilters.stage.includes(s.stage));
         if (globalFilters.date.length > 0) data = data.filter(s => globalFilters.date.includes(s.date));
         if (globalFilters.categoryId.length > 0) data = data.filter(s => globalFilters.categoryId.includes(s.categoryId));
@@ -191,7 +191,7 @@ const SchedulePage: React.FC = () => {
         if (globalSearchTerm) {
             const q = globalSearchTerm.toLowerCase();
             data = data.filter(s => {
-                const item = state.items.find(i => i.id === s.itemId);
+                const item = (state.items || []).find(i => i.id === s.itemId);
                 return item?.name.toLowerCase().includes(q) || s.stage.toLowerCase().includes(q) || s.date.toLowerCase().includes(q);
             });
         }
@@ -221,7 +221,7 @@ const SchedulePage: React.FC = () => {
         }
         setIsLoading(true); setError('');
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `Create a schedule JSON array: [{id, itemId, categoryId, date, time, stage}]. Days: ${eventDays.join(', ')}. Slots: ${eventTimes.join(', ')}. Stages: ${eventStages.join(', ')}. Items: ${state.items.map(i => `${i.name} (ID:${i.id}, Cat:${i.categoryId})`).join('; ')}`;
+        const prompt = `Create a schedule JSON array: [{id, itemId, categoryId, date, time, stage}]. Days: ${eventDays.join(', ')}. Slots: ${eventTimes.join(', ')}. Stages: ${eventStages.join(', ')}. Items: ${(state.items || []).map(i => `${i.name} (ID:${i.id}, Cat:${i.categoryId})`).join('; ')}`;
         try {
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
@@ -242,7 +242,7 @@ const SchedulePage: React.FC = () => {
         setManualEntry(prev => ({ ...prev, itemId: '' }));
     };
 
-    const handleEditSave = () => { if (!state || !editFormData) return; setSchedule(state.schedule.map(s => s.id === editFormData.id ? editFormData : s)); setEditingId(null); };
+    const handleEditSave = () => { if (!state || !editFormData) return; setSchedule((state.schedule || []).map(s => s.id === editFormData.id ? editFormData : s)); setEditingId(null); };
 
     const togglePriority = async () => {
         const next = isTimePrimary ? 'DATE_FIRST' : 'TIME_FIRST';
@@ -271,7 +271,7 @@ const SchedulePage: React.FC = () => {
                         <div className="relative">
                             <select value={manualEntry.categoryId} onChange={e => setManualEntry({ ...manualEntry, categoryId: e.target.value, itemId: '' })} className={selectClasses}>
                                 <option value="">All Categories</option>
-                                {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {(state.categories || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
                         </div>
@@ -287,8 +287,8 @@ const SchedulePage: React.FC = () => {
                         <div className="relative">
                             <select value={manualEntry.itemId} onChange={e => setManualEntry({ ...manualEntry, itemId: e.target.value })} className={selectClasses}>
                                 <option value="">-- Choose Item --</option>
-                                {manualItemsGrouped.onStage.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                                {manualItemsGrouped.offStage.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                {(manualItemsGrouped?.onStage || []).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                {(manualItemsGrouped?.offStage || []).map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                             </select>
                             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
                         </div>

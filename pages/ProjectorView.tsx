@@ -5,7 +5,8 @@ import {
     ChevronRight, Play, Pause, Layers, Zap, 
     MapPin, TrendingUp, Timer, Presentation, Info,
     Hash, BarChart2, CheckCircle2, ChevronUp, ChevronLeft,
-    Monitor, Radio, User
+    Monitor, Radio, User, Upload, Video, Tv, RefreshCw,
+    X, Volume2, VolumeX, Repeat, FileVideo, FileImage, Sparkles, Film
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { TABS } from '../constants';
@@ -62,9 +63,10 @@ const CountUp: React.FC<{ start?: number; end: number; duration?: number; onFini
 // --- Slide Components ---
 
 const ResultSlide: React.FC<{ result: any; revealStep: number }> = ({ result, revealStep }) => {
-    const rank3 = result.winners.find((w: any) => w.position === 3);
-    const rank2 = result.winners.find((w: any) => w.position === 2);
-    const rank1 = result.winners.find((w: any) => w.position === 1);
+    const winners = result?.winners || [];
+    const rank3 = winners.find((w: any) => w.position === 3);
+    const rank2 = winners.find((w: any) => w.position === 2);
+    const rank1 = winners.find((w: any) => w.position === 1);
 
     const PodiumCard = ({ rank, winner, isVisible, isChampion }: any) => {
         if (!isVisible || !winner) return <div className="hidden lg:block w-full h-1"></div>;
@@ -178,12 +180,12 @@ const LeaderboardSlide: React.FC<{
     const [isReplaying, setIsReplaying] = useState(false);
 
     const timelineKey = useMemo(() => {
-        return JSON.stringify(timeline.map(t => t.itemId)) + JSON.stringify(baselinePoints);
+        return JSON.stringify((timeline || []).map(t => t.itemId)) + JSON.stringify(baselinePoints);
     }, [timeline, baselinePoints]);
 
     useEffect(() => {
         if (active) {
-            setTeamStates(teams.map(t => ({
+            setTeamStates((teams || []).map(t => ({
                 id: t.id,
                 name: t.name,
                 points: 0, 
@@ -511,20 +513,78 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
     const [isPaused, setIsPaused] = useState(false);
     const [slideTempo, setSlideTempo] = useState(SPEEDS[1]);
 
+    // Single Media Upload & Projection State
+    const [media, setMedia] = useState<{
+        file: File;
+        url: string;
+        type: 'image' | 'video';
+        name: string;
+        size: string;
+    } | null>(null);
+    const [isProjectingMedia, setIsProjectingMedia] = useState(false);
+    const [isMediaVideoPlaying, setIsMediaVideoPlaying] = useState(true);
+    const [isMediaVideoMuted, setIsMediaVideoMuted] = useState(false);
+    const [isMediaVideoLooping, setIsMediaVideoLooping] = useState(true);
+
     const containerRef = useRef<HTMLDivElement>(null);
     const progressRef = useRef<number>(0);
     const lastTickRef = useRef<number>(Date.now());
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const videoElementRef = useRef<HTMLVideoElement>(null);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (media?.url) {
+            URL.revokeObjectURL(media.url);
+        }
+        const isVideo = file.type.startsWith('video/');
+        const isImage = file.type.startsWith('image/');
+        if (!isVideo && !isImage) {
+            alert('Please select a valid image or video file.');
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        setMedia({
+            file,
+            url,
+            type: isVideo ? 'video' : 'image',
+            name: file.name,
+            size: (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+        });
+        e.target.value = '';
+    };
+
+    useEffect(() => {
+        return () => {
+            if (media?.url) {
+                URL.revokeObjectURL(media.url);
+            }
+        };
+    }, [media]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isProjectingMedia) {
+                setIsProjectingMedia(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isProjectingMedia]);
 
     const calculateItemScores = useCallback((item: any, winners: any[]) => {
-        if (!state) return [];
+        if (!state || !item) return [];
         const gradesConfig = item.type === ItemType.SINGLE ? (state.gradePoints?.single || []) : (state.gradePoints?.group || []);
-        return winners.map(w => {
-            const p = state.participants.find(part => part.id === w.participantId);
-            const t = p ? state.teams.find(tm => tm.id === p.teamId) : null;
+        const participants = state.participants || [];
+        const teams = state.teams || [];
+        return (winners || []).map(w => {
+            const p = participants.find(part => part.id === w.participantId);
+            const t = p ? teams.find(tm => tm.id === p.teamId) : null;
             let prizePts = 0;
-            if (w.position === 1) prizePts += item.points.first || 0;
-            else if (w.position === 2) prizePts += item.points.second || 0;
-            else if (w.position === 3) prizePts += item.points.third || 0;
+            if (w.position === 1) prizePts += item.points?.first || 0;
+            else if (w.position === 2) prizePts += item.points?.second || 0;
+            else if (w.position === 3) prizePts += item.points?.third || 0;
             let gradePts = 0;
             if (w.gradeId) {
                 const grade = gradesConfig.find(g => g.id === w.gradeId);
@@ -540,22 +600,28 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
 
     const data = useMemo(() => {
         if (!state) return null;
+        const results = state.results || [];
+        const items = state.items || [];
+        const categories = state.categories || [];
+        const teams = state.teams || [];
+        const schedule = state.schedule || [];
+        const participants = state.participants || [];
         
-        const declaredOnly = state.results.filter(r => {
-            const item = state.items.find(i => i.id === r.itemId);
+        const declaredOnly = results.filter(r => {
+            const item = items.find(i => i.id === r.itemId);
             return r.status === ResultStatus.DECLARED && !!item;
         });
 
-        const rotationLimit = state.settings.projector?.resultsLimit || 3;
-        const raceLimit = state.settings.projector?.pointsLimit || 10;
+        const rotationLimit = state.settings?.projector?.resultsLimit || 3;
+        const raceLimit = state.settings?.projector?.pointsLimit || 10;
         
         const resultsSlidesData = declaredOnly.slice(-rotationLimit).reverse().map(r => {
-            const item = state.items.find(i => i.id === r.itemId);
-            const category = state.categories.find(c => c.id === item?.categoryId);
+            const item = items.find(i => i.id === r.itemId);
+            const category = categories.find(c => c.id === item?.categoryId);
             if (!item || !category) return null;
             return {
                 id: r.itemId, itemName: item.name, categoryName: category.name,
-                winners: calculateItemScores(item, r.winners).sort((a,b) => (a.position || 99) - (b.position || 99))
+                winners: calculateItemScores(item, r.winners || []).sort((a,b) => (a.position || 99) - (b.position || 99))
             };
         }).filter(Boolean);
 
@@ -564,12 +630,12 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
         const baselineCount = baselineResults.length;
 
         const baselinePoints: Record<string, number> = {};
-        state.teams.forEach(t => baselinePoints[t.id] = 0);
+        teams.forEach(t => baselinePoints[t.id] = 0);
         
         baselineResults.forEach(r => {
-            const item = state.items.find(i => i.id === r.itemId);
+            const item = items.find(i => i.id === r.itemId);
             if (item) {
-                calculateItemScores(item, r.winners).forEach(w => {
+                calculateItemScores(item, r.winners || []).forEach(w => {
                     if (w.teamId) baselinePoints[w.teamId] = (baselinePoints[w.teamId] || 0) + w.totalPoints;
                 });
             }
@@ -577,9 +643,9 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
 
         const totalPointsMap: Record<string, number> = { ...baselinePoints };
         timeline.forEach(r => {
-            const item = state.items.find(i => i.id === r.itemId);
+            const item = items.find(i => i.id === r.itemId);
             if (item) {
-                calculateItemScores(item, r.winners).forEach(w => {
+                calculateItemScores(item, r.winners || []).forEach(w => {
                     if (w.teamId) totalPointsMap[w.teamId] = (totalPointsMap[w.teamId] || 0) + w.totalPoints;
                 });
             }
@@ -587,25 +653,24 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
 
         // CALCULATE CATEGORY TOPPERS (Individual Single Points)
         const toppersMap: Record<string, any[]> = {};
-        state.categories.forEach(c => toppersMap[c.id] = []);
+        categories.forEach(c => toppersMap[c.id] = []);
 
         declaredOnly.forEach(r => {
-            const item = state.items.find(i => i.id === r.itemId);
+            const item = items.find(i => i.id === r.itemId);
             if (item && item.type === ItemType.SINGLE) {
-                calculateItemScores(item, r.winners).forEach(w => {
+                calculateItemScores(item, r.winners || []).forEach(w => {
                     if (w.participantId && w.totalPoints > 0) {
-                        const entryId = `${item.categoryId}_${w.participantId}`;
-                        const existing = toppersMap[item.categoryId].find(e => e.participantId === w.participantId);
+                        const existing = toppersMap[item.categoryId]?.find(e => e.participantId === w.participantId);
                         if (existing) {
                             existing.points += w.totalPoints;
-                        } else {
+                        } else if (toppersMap[item.categoryId]) {
                             toppersMap[item.categoryId].push({ 
                                 participantId: w.participantId, 
                                 name: w.participantName, 
                                 teamName: w.teamName, 
                                 chestNumber: w.chestNumber || '',
                                 points: w.totalPoints, 
-                                categoryName: state.categories.find(c => c.id === item.categoryId)?.name || '' 
+                                categoryName: categories.find(c => c.id === item.categoryId)?.name || '' 
                             });
                         }
                     }
@@ -613,7 +678,7 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
             }
         });
 
-        const categoryToppers = state.categories.map(c => {
+        const categoryToppers = (categories || []).map(c => {
             const list = toppersMap[c.id];
             if (!list || list.length === 0) return null;
             const topper = [...list].sort((a,b) => b.points - a.points)[0];
@@ -626,22 +691,22 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
             baselinePoints: baselinePoints,
             baselineCount: baselineCount,
             categoryToppers: categoryToppers,
-            teams: state.teams.map(t => ({ id: t.id, name: t.name })),
+            teams: (teams || []).map(t => ({ id: t.id, name: t.name })),
             stats: {
-                participants: state.participants.length, items: state.items.length,
-                declared: declaredOnly.length, categories: state.categories.length,
+                participants: (participants || []).length, items: (items || []).length,
+                declared: (declaredOnly || []).length, categories: (categories || []).length,
                 totalPoints: Object.values(totalPointsMap).reduce((a, b) => a + b, 0),
-                scheduled: state.schedule.length
+                scheduled: (schedule || []).length
             },
-            upcoming: state.schedule.map(ev => ({ 
-                ...ev, itemName: state.items.find(i => i.id === ev.itemId)?.name, 
-                categoryName: state.categories.find(c => c.id === ev.categoryId)?.name 
+            upcoming: (schedule || []).map(ev => ({ 
+                ...ev, itemName: (items || []).find(i => i.id === ev.itemId)?.name, 
+                categoryName: (categories || []).find(c => c.id === ev.categoryId)?.name 
             }))
         };
     }, [state, calculateItemScores]);
 
     const SLIDE_ORDER: SlideType[] = useMemo(() => {
-        const config = state?.settings.projector;
+        const config = state?.settings?.projector;
         const slides: SlideType[] = [];
         if (config?.showResults !== false && data?.results) {
             data.results.forEach((_, i) => slides.push(`RESULT_${i}`));
@@ -672,7 +737,7 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
 
     useEffect(() => {
         const tick = () => {
-            if (isPaused) { lastTickRef.current = Date.now(); return; }
+            if (isPaused || isProjectingMedia) { lastTickRef.current = Date.now(); return; }
             const now = Date.now();
             const delta = now - lastTickRef.current;
             lastTickRef.current = now;
@@ -689,7 +754,7 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
         };
         const interval = setInterval(tick, 30);
         return () => clearInterval(interval);
-    }, [isPaused, currentSlideDuration, SLIDE_ORDER.length]);
+    }, [isPaused, isProjectingMedia, currentSlideDuration, SLIDE_ORDER.length]);
 
     useEffect(() => {
         if (SLIDE_ORDER[currentSlideIndex]?.startsWith('RESULT')) {
@@ -710,6 +775,191 @@ const ProjectorView: React.FC<ProjectorViewProps> = ({ onNavigate }) => {
 
     return (
         <div ref={containerRef} className="h-screen w-screen overflow-hidden relative font-sans select-none bg-black text-white flex flex-col p-0 m-0">
+            {/* Hidden File Input for Single Media Upload */}
+            <input 
+                ref={fileInputRef} 
+                type="file" 
+                accept="image/*,video/*" 
+                className="hidden" 
+                onChange={handleFileUpload} 
+            />
+
+            {/* Top Right Media Upload / Project Media Control (Visible during slideshow) */}
+            {!isProjectingMedia && (
+                <div className="fixed top-5 right-5 z-[70] flex items-center gap-3 pointer-events-auto">
+                    {!media ? (
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-2.5 px-4 sm:px-5 py-2.5 bg-black/80 hover:bg-black/95 backdrop-blur-2xl border border-white/20 hover:border-emerald-500/50 text-white rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.7)] transition-all duration-300 hover:scale-105 active:scale-95 group text-xs font-black uppercase tracking-wider"
+                            title="Upload single media (image or video) to project"
+                        >
+                            <div className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-black transition-colors">
+                                <Upload size={14} className="stroke-[2.5]" />
+                            </div>
+                            <span>Upload Media</span>
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2 p-1.5 bg-black/85 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] animate-in slide-in-from-top-4 duration-300">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl text-[11px] font-bold text-zinc-300 max-w-[140px] sm:max-w-[200px] truncate">
+                                {media.type === 'video' ? <FileVideo size={14} className="text-amber-400 shrink-0" /> : <FileImage size={14} className="text-emerald-400 shrink-0" />}
+                                <span className="truncate" title={media.name}>{media.name}</span>
+                            </div>
+
+                            <button
+                                onClick={() => setIsProjectingMedia(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs uppercase tracking-wider rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all duration-300 hover:scale-105 active:scale-95 animate-pulse"
+                                title="Project this media onto the big screen"
+                            >
+                                <Tv size={14} className="stroke-[2.5]" />
+                                <span>Project Media</span>
+                            </button>
+
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-2 bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white rounded-xl transition-all"
+                                title="Replace media"
+                            >
+                                <RefreshCw size={14} />
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    if (media.url) URL.revokeObjectURL(media.url);
+                                    setMedia(null);
+                                }}
+                                className="p-2 bg-rose-500/20 hover:bg-rose-500 text-rose-400 hover:text-white rounded-xl transition-all"
+                                title="Remove media"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* FULLSCREEN MEDIA PROJECTION SCREEN */}
+            {isProjectingMedia && media && (
+                <div className="fixed inset-0 z-[80] bg-black flex flex-col animate-in fade-in duration-300 select-none">
+                    {/* Top Navigation Bar */}
+                    <div className="relative z-20 w-full p-4 sm:p-6 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent">
+                        {/* Back button to live point race screen */}
+                        <button
+                            onClick={() => setIsProjectingMedia(false)}
+                            className="flex items-center gap-2.5 px-4 sm:px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-[0_10px_35px_rgba(99,102,241,0.5)] transition-all duration-300 hover:scale-105 active:scale-95 border border-indigo-400/40 group"
+                            title="Return to the live point race screen"
+                        >
+                            <ArrowLeft size={18} className="stroke-[3] group-hover:-translate-x-1 transition-transform" />
+                            <span>Back to Live Points Race</span>
+                        </button>
+
+                        {/* Status badge */}
+                        <div className="hidden md:flex items-center gap-2.5 px-4 py-2 bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl text-xs font-bold text-zinc-300">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Media Projection</span>
+                            <span className="text-zinc-500">•</span>
+                            <span className="max-w-[240px] truncate text-zinc-200 font-medium">{media.name}</span>
+                        </div>
+
+                        {/* Right Quick Controls */}
+                        <div className="flex items-center gap-2">
+                            {media.type === 'video' && (
+                                <>
+                                    <button
+                                        onClick={() => {
+                                            if (videoElementRef.current) {
+                                                if (videoElementRef.current.paused) {
+                                                    videoElementRef.current.play();
+                                                    setIsMediaVideoPlaying(true);
+                                                } else {
+                                                    videoElementRef.current.pause();
+                                                    setIsMediaVideoPlaying(false);
+                                                }
+                                            }
+                                        }}
+                                        className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                                        title={isMediaVideoPlaying ? "Pause Video" : "Play Video"}
+                                    >
+                                        {isMediaVideoPlaying ? <Pause size={18} /> : <Play size={18} />}
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            if (videoElementRef.current) {
+                                                videoElementRef.current.muted = !isMediaVideoMuted;
+                                                setIsMediaVideoMuted(!isMediaVideoMuted);
+                                            }
+                                        }}
+                                        className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                                        title={isMediaVideoMuted ? "Unmute Audio" : "Mute Audio"}
+                                    >
+                                        {isMediaVideoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setIsMediaVideoLooping(!isMediaVideoLooping);
+                                        }}
+                                        className={`p-3 rounded-xl transition-all ${isMediaVideoLooping ? 'bg-indigo-600 text-white' : 'bg-white/10 hover:bg-white/20 text-zinc-400'}`}
+                                        title={isMediaVideoLooping ? "Loop Enabled" : "Loop Disabled"}
+                                    >
+                                        <Repeat size={18} />
+                                    </button>
+                                </>
+                            )}
+
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                                title="Replace currently projected media"
+                            >
+                                <RefreshCw size={14} />
+                                <span className="hidden sm:inline">Replace Media</span>
+                            </button>
+
+                            <button
+                                onClick={toggleFullscreen}
+                                className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                                title="Toggle Fullscreen"
+                            >
+                                {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Media Display Container */}
+                    <div className="flex-grow w-full h-full relative overflow-hidden flex items-center justify-center p-4 sm:p-8">
+                        {media.type === 'image' ? (
+                            <div className="relative w-full h-full flex items-center justify-center">
+                                <div 
+                                    className="absolute inset-0 bg-contain bg-center blur-3xl opacity-25 scale-125 pointer-events-none" 
+                                    style={{ backgroundImage: `url(${media.url})` }} 
+                                />
+                                <img
+                                    src={media.url}
+                                    alt={media.name}
+                                    className="relative z-10 max-w-full max-h-[82vh] object-contain rounded-2xl shadow-[0_30px_100px_rgba(0,0,0,0.95)] border border-white/10 animate-in zoom-in-95 duration-500"
+                                />
+                            </div>
+                        ) : (
+                            <div className="relative w-full h-full flex items-center justify-center">
+                                <video
+                                    ref={videoElementRef}
+                                    src={media.url}
+                                    autoPlay
+                                    playsInline
+                                    loop={isMediaVideoLooping}
+                                    muted={isMediaVideoMuted}
+                                    controls
+                                    className="relative z-10 max-w-full max-h-[82vh] object-contain rounded-2xl shadow-[0_30px_100px_rgba(0,0,0,0.95)] border border-white/10"
+                                    onPlay={() => setIsMediaVideoPlaying(true)}
+                                    onPause={() => setIsMediaVideoPlaying(false)}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[80vw] h-[80vw] bg-emerald-50/10 rounded-full blur-[160px] animate-pulse"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-50/15 rounded-full blur-[140px] animate-pulse" style={{ animationDelay: '3s' }}></div>

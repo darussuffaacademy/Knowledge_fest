@@ -147,18 +147,24 @@ const PointsPage: React.FC = () => {
         const participantRawEntries: any[] = [];
         const itemAggregate: Record<string, any> = {};
 
-        results.forEach(result => {
+        // Extract Filters safely from globalFilters
+        const catFilters = globalFilters?.categoryId || [];
+        const perfFilters = globalFilters?.performanceType || [];
+        const typeFilters = globalFilters?.itemType || [];
+        const idFilters = globalFilters?.itemId || [];
+        const teamFilters = globalFilters?.teamId || [];
+
+        (results || []).forEach(result => {
             if (result.status !== ResultStatus.DECLARED && result.status !== ResultStatus.UPDATED) return;
             
-            const item = items.find(i => i.id === result.itemId);
-            const category = categories.find(c => c.id === result.categoryId);
+            const item = (items || []).find(i => i.id === result.itemId);
+            const category = (categories || []).find(c => c.id === result.categoryId);
             if (!item || !category) return;
 
-            // Apply Filters: Category, Performance Type, Item ID, Item Type (Robust check)
-            const matchesCat = globalFilters.categoryId.length === 0 || globalFilters.categoryId.includes(item.categoryId);
-            const matchesPerf = globalFilters.performanceType.length === 0 || globalFilters.performanceType.includes(item.performanceType);
-            const matchesItemType = globalFilters.itemType.length === 0 || globalFilters.itemType.some(t => t.toLowerCase() === (item.type || '').toLowerCase());
-            const matchesItemId = globalFilters.itemId.length === 0 || globalFilters.itemId.includes(item.id);
+            const matchesCat = catFilters.length === 0 || catFilters.includes(item.categoryId);
+            const matchesPerf = perfFilters.length === 0 || perfFilters.includes(item.performanceType);
+            const matchesItemType = typeFilters.length === 0 || typeFilters.some(t => t.toLowerCase() === (item.type || '').toLowerCase());
+            const matchesItemId = idFilters.length === 0 || idFilters.includes(item.id);
 
             if (!matchesCat || !matchesPerf || !matchesItemType || !matchesItemId) return;
             
@@ -172,22 +178,22 @@ const PointsPage: React.FC = () => {
                 };
             }
 
-            result.winners.forEach(winner => {
-                const p = participants.find(part => part.id === winner.participantId);
+            (result.winners || []).forEach(winner => {
+                const p = (participants || []).find(part => part.id === winner.participantId);
                 if (!p) return;
                 
                 const team = teamData[p.teamId];
                 if (!team) return;
 
                 let rankPts = 0;
-                if (winner.position === 1) rankPts = item.points.first;
-                else if (winner.position === 2) rankPts = item.points.second;
-                else if (winner.position === 3) rankPts = item.points.third;
+                if (winner.position === 1) rankPts = item.points?.first || 0;
+                else if (winner.position === 2) rankPts = item.points?.second || 0;
+                else if (winner.position === 3) rankPts = item.points?.third || 0;
 
                 let gradePts = 0; 
                 let gradeName = '-';
                 if (winner.gradeId) {
-                    const gradeConfig = item.type === ItemType.SINGLE ? (gradePoints.single || []) : (gradePoints.group || []);
+                    const gradeConfig = item.type === ItemType.SINGLE ? (gradePoints?.single || []) : (gradePoints?.group || []);
                     const grade = gradeConfig.find(g => g.id === winner.gradeId);
                     if (grade) { 
                         gradeName = grade.name; 
@@ -277,41 +283,41 @@ const PointsPage: React.FC = () => {
 
         // Filter: Team Selection
         let finalTeamData = Object.values(teamData);
-        if (globalFilters.teamId.length > 0) finalTeamData = finalTeamData.filter(t => globalFilters.teamId.includes(t.teamId));
+        if (teamFilters.length > 0) finalTeamData = finalTeamData.filter(t => teamFilters.includes(t.teamId));
 
         // Filter: Item Aggregate (Search + Active filters already applied)
         let finalItemAggregate = Object.values(itemAggregate);
         if (globalSearchTerm) {
             const q = globalSearchTerm.toLowerCase();
-            finalItemAggregate = finalItemAggregate.filter(agg => agg.item.name.toLowerCase().includes(q));
+            finalItemAggregate = finalItemAggregate.filter(agg => agg?.item?.name?.toLowerCase().includes(q));
         }
-        if (globalFilters.teamId.length > 0) {
+        if (teamFilters.length > 0) {
             finalItemAggregate = finalItemAggregate.map(agg => ({
                 ...agg,
-                winners: agg.winners.filter((w: any) => globalFilters.teamId.includes(w.teamId)),
-                totalPoints: agg.winners.filter((w: any) => globalFilters.teamId.includes(w.teamId)).reduce((s: number, w: any) => s + w.total, 0)
-            })).filter(agg => agg.winners.length > 0);
+                winners: (agg.winners || []).filter((w: any) => teamFilters.includes(w.teamId)),
+                totalPoints: (agg.winners || []).filter((w: any) => teamFilters.includes(w.teamId)).reduce((s: number, w: any) => s + (w.total || 0), 0)
+            })).filter(agg => agg.winners && agg.winners.length > 0);
         }
 
         // Filter: Participant Entries (Team + Search)
         let finalParticipantEntries = [...participantRawEntries];
-        if (globalFilters.teamId.length > 0) finalParticipantEntries = finalParticipantEntries.filter(e => globalFilters.teamId.includes(e.participant.teamId));
+        if (teamFilters.length > 0) finalParticipantEntries = finalParticipantEntries.filter(e => e.participant && teamFilters.includes(e.participant.teamId));
         if (globalSearchTerm) {
             const q = globalSearchTerm.toLowerCase();
             finalParticipantEntries = finalParticipantEntries.filter(e => 
-                e.participant.name.toLowerCase().includes(q) || e.participant.chestNumber.toLowerCase().includes(q)
+                e.participant && ((e.participant.name || '').toLowerCase().includes(q) || (e.participant.chestNumber || '').toLowerCase().includes(q))
             );
         }
 
         return { 
             teamData: finalTeamData, 
             participantRawEntries: finalParticipantEntries, 
-            itemAggregate: finalItemAggregate.sort((a,b) => b.totalPoints - a.totalPoints),
+            itemAggregate: finalItemAggregate.sort((a,b) => (b.totalPoints || 0) - (a.totalPoints || 0)),
             stats: { 
                 updatedCount: activeItemIds.size, 
-                contributorsCount: new Set(finalParticipantEntries.map(e => e.participant.id)).size, 
+                contributorsCount: new Set(finalParticipantEntries.map(e => e.participant?.id).filter(Boolean)).size, 
                 totalEntries: finalParticipantEntries.length,
-                totalPoints: finalTeamData.reduce((sum, t) => sum + t.totalPoints, 0)
+                totalPoints: finalTeamData.reduce((sum, t) => sum + (t.totalPoints || 0), 0)
             } 
         };
     }, [teams, categories, participants, results, items, gradePoints, tabulation, globalFilters, globalSearchTerm]);
@@ -328,7 +334,8 @@ const PointsPage: React.FC = () => {
     const participantsAggregated = useMemo(() => {
         if (!analytics) return [];
         const map = new Map<string, any>();
-        analytics.participantRawEntries.forEach(entry => {
+        (analytics.participantRawEntries || []).forEach(entry => {
+            if (!entry?.participant?.id) return;
             if (!map.has(entry.participant.id)) {
                 map.set(entry.participant.id, { 
                     ...entry.participant, 
@@ -340,15 +347,16 @@ const PointsPage: React.FC = () => {
             const p = map.get(entry.participant.id);
             // Modified: If a filter is active, we should show the points within that filtered context.
             // If No filter is active, we only count Single for individual leaderboard logic.
-            if (globalFilters.itemType.length > 0) {
-                 p.total += entry.total;
-            } else if (entry.item.type === ItemType.SINGLE) {
-                 p.total += entry.total;
+            const itemTypes = globalFilters?.itemType || [];
+            if (itemTypes.length > 0) {
+                 p.total += (entry.total || 0);
+            } else if (entry.item?.type === ItemType.SINGLE) {
+                 p.total += (entry.total || 0);
             }
             p.items.push(entry);
         });
-        return Array.from(map.values()).sort((a,b) => b.total - a.total);
-    }, [analytics, teams, globalFilters.itemType]);
+        return Array.from(map.values()).sort((a,b) => (b.total || 0) - (a.total || 0));
+    }, [analytics, teams, globalFilters?.itemType]);
 
     if (!state || !analytics) return <div className="p-12 text-center text-zinc-500">Calculating standings...</div>;
 
@@ -479,7 +487,7 @@ const PointsPage: React.FC = () => {
 
                                     {isTExpanded && (
                                         <div className="px-4 pb-4 sm:px-12 sm:pb-8 space-y-2 animate-in slide-in-from-top-4 duration-300">
-                                            {Object.values(team.categories).sort((a:any, b:any) => b.total - a.total).map((cat: any) => {
+                                            {Object.values(team?.categories || {}).sort((a:any, b:any) => (b.total || 0) - (a.total || 0)).map((cat: any) => {
                                                 const isCExpanded = expandedCategories.has(`${team.teamId}-${cat.categoryId}`);
                                                 return (
                                                     <div key={cat.categoryId} className="bg-zinc-50 dark:bg-black/20 rounded-[1.5rem] border border-zinc-100 dark:border-white/5 overflow-hidden">
@@ -495,7 +503,7 @@ const PointsPage: React.FC = () => {
                                                         </div>
                                                         {isCExpanded && (
                                                             <div className="px-4 pb-4 space-y-1.5">
-                                                                {Object.values(cat.items).sort((a:any,b:any) => b.total - a.total).map((item: any) => {
+                                                                {Object.values(cat?.items || {}).sort((a:any,b:any) => (b.total || 0) - (a.total || 0)).map((item: any) => {
                                                                     const isIExpanded = expandedItems.has(`${team.teamId}-${cat.categoryId}-${item.itemId}`);
                                                                     return (
                                                                         <div key={item.itemId} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-xl overflow-hidden shadow-sm">
@@ -511,7 +519,7 @@ const PointsPage: React.FC = () => {
                                                                             </div>
                                                                             {isIExpanded && (
                                                                                 <div className="p-3 pt-0 border-t border-zinc-50 dark:border-white/5 space-y-1 bg-zinc-50/30">
-                                                                                    {item.contributors.map((c: any) => (
+                                                                                    {(item.contributors || []).map((c: any) => (
                                                                                         <div key={c.participantId} className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-white transition-colors">
                                                                                             <div className="flex items-center gap-3">
                                                                                                 <span className="text-[9px] font-black text-zinc-400 w-8">#{c.chestNumber}</span>
@@ -554,14 +562,14 @@ const PointsPage: React.FC = () => {
                         <h3 className="text-xl font-black font-serif uppercase text-amazio-primary dark:text-white">Item Analytics</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {analytics.itemAggregate.map(agg => (
+                        {(analytics.itemAggregate || []).map(agg => (
                             <div 
                                 key={agg.item.id} 
                                 onClick={() => setSelectedItem(agg)}
                                 className="bg-white dark:bg-[#121412] p-6 rounded-[2rem] border border-zinc-100 dark:border-white/5 shadow-sm group hover:shadow-xl transition-all cursor-pointer flex flex-col hover:-translate-y-1"
                             >
                                 <div className="flex justify-between items-start mb-4">
-                                    <div className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black uppercase text-zinc-500 border border-zinc-200 dark:border-zinc-700">{agg.category.name}</div>
+                                    <div className="px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black uppercase text-zinc-500 border border-zinc-200 dark:border-zinc-700">{agg.category?.name}</div>
                                     <div className="text-2xl font-black text-indigo-500 tabular-nums">{agg.totalPoints}</div>
                                 </div>
                                 <h4 className="text-lg font-black uppercase text-amazio-primary dark:text-white tracking-tight leading-tight mb-4">{agg.item.name}</h4>
@@ -713,7 +721,7 @@ const PointsPage: React.FC = () => {
                     <div className="text-[10px] font-black uppercase text-zinc-500 tracking-widest px-2 mb-4">Contribution Matrix</div>
 
                     <div className="grid grid-cols-1 gap-3">
-                        {selectedParticipant?.items.map((e: any, idx: number) => (
+                        {(selectedParticipant?.items || []).map((e: any, idx: number) => (
                             <div key={idx} className="flex items-center justify-between p-4 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-white/5 rounded-[1.5rem] shadow-sm">
                                 <div className="min-w-0 pr-4">
                                     <div className="flex items-center gap-2 mb-1">

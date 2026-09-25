@@ -41,8 +41,8 @@ const EntitySelectorModal: React.FC<{
     if (!isOpen || !state) return null;
 
     const list = type === 'ITEM' 
-        ? state.items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
-        : state.participants.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.chestNumber.toLowerCase().includes(search.toLowerCase()));
+        ? (state.items || []).filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+        : (state.participants || []).filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.chestNumber.toLowerCase().includes(search.toLowerCase()));
 
     return ReactDOM.createPortal(
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
@@ -67,7 +67,7 @@ const EntitySelectorModal: React.FC<{
                         />
                     </div>
                     <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[40vh] pr-2">
-                        {list.map(entity => (
+                        {(list || []).map(entity => (
                             <button 
                                 key={entity.id} 
                                 onClick={() => { onSelect(entity); onClose(); }}
@@ -77,14 +77,14 @@ const EntitySelectorModal: React.FC<{
                                     <h5 className="text-sm font-black uppercase tracking-tight text-amazio-primary dark:text-zinc-100 truncate group-hover:text-indigo-600 transition-colors">{entity.name}</h5>
                                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">
                                         {type === 'ITEM' 
-                                            ? state.categories.find(c => c.id === entity.categoryId)?.name 
-                                            : `${state.teams.find(t => t.id === entity.teamId)?.name} • ${state.categories.find(c => c.id === entity.categoryId)?.name}`}
+                                            ? (state.categories || []).find(c => c.id === entity.categoryId)?.name 
+                                            : `${(state.teams || []).find(t => t.id === entity.teamId)?.name} • ${(state.categories || []).find(c => c.id === entity.categoryId)?.name}`}
                                     </p>
                                 </div>
                                 <ArrowRight size={16} className="text-zinc-300 group-hover:text-indigo-500 transition-all" />
                             </button>
                         ))}
-                        {list.length === 0 && <div className="py-12 text-center opacity-30 italic text-xs uppercase font-bold tracking-widest">No matching results</div>}
+                        {(!list || list.length === 0) && <div className="py-12 text-center opacity-30 italic text-xs uppercase font-bold tracking-widest">No matching results</div>}
                     </div>
                 </div>
             </div>
@@ -113,14 +113,14 @@ const ItemManagementModal: React.FC<{
 
     const groupedAssignableParticipants = useMemo<Record<string, Participant[]>>(() => {
         if (!state) return {};
-        const isGeneralItem = state.categories.find(c => c.id === item.categoryId)?.isGeneralCategory;
-        const list = draftParticipants
-            .filter(p => (isGeneralItem || p.categoryId === item.categoryId) && !p.itemIds.includes(item.id))
-            .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.chestNumber.toLowerCase().includes(search.toLowerCase()));
+        const isGeneralItem = (state.categories || []).find(c => c.id === item.categoryId)?.isGeneralCategory;
+        const list = (draftParticipants || [])
+            .filter(p => (isGeneralItem || p.categoryId === item.categoryId) && !(p.itemIds || []).includes(item.id))
+            .filter(p => (p.name || '').toLowerCase().includes(search.toLowerCase()) || (p.chestNumber || '').toLowerCase().includes(search.toLowerCase()));
         
         const groups: Record<string, Participant[]> = {};
         list.forEach(p => {
-            const catName = state.categories.find(c => c.id === p.categoryId)?.name || 'Uncategorized';
+            const catName = (state.categories || []).find(c => c.id === p.categoryId)?.name || 'Uncategorized';
             if (!groups[catName]) groups[catName] = [];
             groups[catName].push(p);
         });
@@ -129,15 +129,15 @@ const ItemManagementModal: React.FC<{
 
     if (!isOpen || !state) return null;
 
-    const category = state.categories.find(c => c.id === item.categoryId);
+    const category = (state.categories || []).find(c => c.id === item.categoryId);
     const isGroup = item.type === ItemType.GROUP;
-    const totalEnrolled = draftParticipants.filter(p => p.itemIds.includes(item.id)).length;
+    const totalEnrolled = (draftParticipants || []).filter(p => (p.itemIds || []).includes(item.id)).length;
 
     const handleAssign = (p: Participant, groupIndex?: number) => {
-        setDraftParticipants(prev => prev.map(participant => {
+        setDraftParticipants(prev => (prev || []).map(participant => {
             if (participant.id !== p.id) return participant;
 
-            const newItemIds = Array.from(new Set([...participant.itemIds, item.id]));
+            const newItemIds = Array.from(new Set([...(participant.itemIds || []), item.id]));
             const newItemGroups = { ...(participant.itemGroups || {}) };
             if (isGroup && groupIndex !== undefined) {
                 newItemGroups[item.id] = groupIndex;
@@ -148,12 +148,12 @@ const ItemManagementModal: React.FC<{
             const updated: Participant = { ...participant, itemIds: newItemIds, itemGroups: newItemGroups };
 
             if (isGroup && groupIndex !== undefined) {
-                const teamParticipantsInDraft = prev.filter(tp => 
+                const teamParticipantsInDraft = (prev || []).filter(tp => 
                     tp.teamId === participant.teamId && 
-                    tp.itemIds.includes(item.id) && 
+                    (tp.itemIds || []).includes(item.id) && 
                     (tp.itemGroups?.[item.id] || 1) === groupIndex
                 );
-                const hasLeader = teamParticipantsInDraft.some(tp => tp.groupLeaderItemIds?.includes(item.id));
+                const hasLeader = teamParticipantsInDraft.some(tp => (tp.groupLeaderItemIds || []).includes(item.id));
                 if (!hasLeader) {
                     updated.groupLeaderItemIds = Array.from(new Set([...(participant.groupLeaderItemIds || []), item.id]));
                 }
@@ -164,10 +164,10 @@ const ItemManagementModal: React.FC<{
     };
 
     const handleRemove = (p: Participant) => {
-        setDraftParticipants(prev => prev.map(participant => {
+        setDraftParticipants(prev => (prev || []).map(participant => {
             if (participant.id !== p.id) return participant;
 
-            const newItemIds = participant.itemIds.filter(id => id !== item.id);
+            const newItemIds = (participant.itemIds || []).filter(id => id !== item.id);
             const newItemGroups = { ...(participant.itemGroups || {}) };
             delete newItemGroups[item.id];
             
@@ -189,13 +189,13 @@ const ItemManagementModal: React.FC<{
         if (!isGroup) return;
 
         setDraftParticipants(prev => {
-            const membersOfGroup = prev.filter(p => 
+            const membersOfGroup = (prev || []).filter(p => 
                 p.teamId === targetParticipant.teamId && 
-                p.itemIds.includes(item.id) && 
+                (p.itemIds || []).includes(item.id) && 
                 (p.itemGroups?.[item.id] || 1) === groupIndex
             );
 
-            return prev.map(m => {
+            return (prev || []).map(m => {
                 if (!membersOfGroup.some(member => member.id === m.id)) return m;
 
                 const isTarget = m.id === targetParticipant.id;
@@ -214,9 +214,9 @@ const ItemManagementModal: React.FC<{
 
     const handleClearAllEnrolled = () => {
         if (totalEnrolled === 0) return;
-        setDraftParticipants(prev => prev.map(participant => {
-            if (!participant.itemIds.includes(item.id)) return participant;
-            const newItemIds = participant.itemIds.filter(id => id !== item.id);
+        setDraftParticipants(prev => (prev || []).map(participant => {
+            if (!(participant.itemIds || []).includes(item.id)) return participant;
+            const newItemIds = (participant.itemIds || []).filter(id => id !== item.id);
             const newItemGroups = { ...(participant.itemGroups || {}) };
             delete newItemGroups[item.id];
             const nextLeaders = (participant.groupLeaderItemIds || []).filter(id => id !== item.id);
@@ -235,8 +235,8 @@ const ItemManagementModal: React.FC<{
     const handleConfirmSave = async () => {
         setIsSaving(true);
         try {
-            const changed = draftParticipants.filter(dp => {
-                const original = state.participants.find(sp => sp.id === dp.id);
+            const changed = (draftParticipants || []).filter(dp => {
+                const original = (state.participants || []).find(sp => sp.id === dp.id);
                 return JSON.stringify(original) !== JSON.stringify(dp);
             });
 
@@ -289,8 +289,8 @@ const ItemManagementModal: React.FC<{
                                 <UsersIcon size={14}/> Unit Status
                             </h4>
                             <div className="space-y-4">
-                                {state.teams.map(team => {
-                                    const teamParticipants = draftParticipants.filter(p => p.teamId === team.id && p.itemIds.includes(item.id));
+                                {(state.teams || []).map(team => {
+                                    const teamParticipants = draftParticipants.filter(p => p.teamId === team.id && (p.itemIds || []).includes(item.id));
                                     
                                     return (
                                         <div key={team.id} className="p-5 rounded-3xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-zinc-800">
@@ -460,14 +460,14 @@ const ParticipantManagementModal: React.FC<{
 
     const groupedAvailableItems = useMemo<Record<string, Item[]>>(() => {
         if (!state || !draftParticipant) return {};
-        const generalCategoryIds = new Set(state.categories.filter(c => c.isGeneralCategory).map(c => c.id));
-        const list = state.items
+        const generalCategoryIds = new Set((state.categories || []).filter(c => c.isGeneralCategory).map(c => c.id));
+        const list = (state.items || [])
             .filter(i => i.categoryId === draftParticipant.categoryId || generalCategoryIds.has(i.categoryId))
-            .filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+            .filter(i => (i.name || '').toLowerCase().includes(search.toLowerCase()));
         
         const groups: Record<string, Item[]> = {};
         list.forEach(i => {
-            const catName = state.categories.find(c => c.id === i.categoryId)?.name || 'Uncategorized';
+            const catName = (state.categories || []).find(c => c.id === i.categoryId)?.name || 'Uncategorized';
             if (!groups[catName]) groups[catName] = [];
             groups[catName].push(i);
         });
@@ -476,15 +476,15 @@ const ParticipantManagementModal: React.FC<{
 
     if (!isOpen || !state || !draftParticipant) return null;
 
-    const team = state.teams.find(t => t.id === draftParticipant.teamId);
-    const category = state.categories.find(c => c.id === draftParticipant.categoryId);
+    const team = (state.teams || []).find(t => t.id === draftParticipant.teamId);
+    const category = (state.categories || []).find(c => c.id === draftParticipant.categoryId);
     const theme = getCategoryTheme(category?.name || '');
-    const currentEnrolledCount = draftParticipant.itemIds.length;
+    const currentEnrolledCount = (draftParticipant.itemIds || []).length;
 
     const toggleEnrollment = (item: Item) => {
-        const isEnrolled = draftParticipant.itemIds.includes(item.id);
+        const isEnrolled = (draftParticipant.itemIds || []).includes(item.id);
         if (isEnrolled) {
-            const newItemIds = draftParticipant.itemIds.filter(id => id !== item.id);
+            const newItemIds = (draftParticipant.itemIds || []).filter(id => id !== item.id);
             const newItemGroups = { ...(draftParticipant.itemGroups || {}) };
             delete newItemGroups[item.id];
             const nextLeaders = (draftParticipant.groupLeaderItemIds || []).filter(id => id !== item.id);
@@ -493,7 +493,7 @@ const ParticipantManagementModal: React.FC<{
 
             setDraftParticipant({ ...draftParticipant, itemIds: newItemIds, itemGroups: newItemGroups, groupLeaderItemIds: nextLeaders, groupChestNumbers: nextChests });
         } else {
-            const teamEnrolled = state.participants.filter(p => p.teamId === draftParticipant.teamId && p.itemIds.includes(item.id));
+            const teamEnrolled = (state.participants || []).filter(p => p.teamId === draftParticipant.teamId && (p.itemIds || []).includes(item.id));
             const isGroup = item.type === ItemType.GROUP;
             const totalLimit = isGroup ? ((item.maxGroupsPerTeam || 1) * item.maxParticipants) : item.maxParticipants;
             
@@ -502,7 +502,7 @@ const ParticipantManagementModal: React.FC<{
                 return;
             }
 
-            const newItemIds = [...draftParticipant.itemIds, item.id];
+            const newItemIds = [...(draftParticipant.itemIds || []), item.id];
             const newItemGroups = { ...(draftParticipant.itemGroups || {}) };
             const nextLeaders = [...(draftParticipant.groupLeaderItemIds || [])];
 
@@ -530,7 +530,7 @@ const ParticipantManagementModal: React.FC<{
     };
 
     const handleClearAllPrograms = () => {
-        if (!draftParticipant || draftParticipant.itemIds.length === 0) return;
+        if (!draftParticipant || (draftParticipant.itemIds || []).length === 0) return;
         setDraftParticipant({
             ...draftParticipant,
             itemIds: [],
@@ -657,22 +657,22 @@ const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTrigger
 
     const filteredItems = useMemo(() => {
         if (!state) return [];
-        return state.items.filter(item => {
-            const matchesSearch = item.name.toLowerCase().includes(globalSearchTerm.toLowerCase());
-            const matchesCat = globalFilters.categoryId.length > 0 ? globalFilters.categoryId.includes(item.categoryId) : true;
-            const matchesPerf = globalFilters.performanceType.length > 0 ? globalFilters.performanceType.includes(item.performanceType) : true;
+        return (state.items || []).filter(item => {
+            const matchesSearch = (item.name || '').toLowerCase().includes(globalSearchTerm.toLowerCase());
+            const matchesCat = (globalFilters?.categoryId || []).length > 0 ? (globalFilters?.categoryId || []).includes(item.categoryId) : true;
+            const matchesPerf = (globalFilters?.performanceType || []).length > 0 ? (globalFilters?.performanceType || []).includes(item.performanceType) : true;
             return matchesSearch && matchesCat && matchesPerf;
-        }).sort((a,b) => a.name.localeCompare(b.name));
+        }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
     }, [state, globalSearchTerm, globalFilters]);
 
     const handleClearItemEnrollments = async () => {
         if (!itemToClear || !state) return;
         setIsClearing(true);
         try {
-            const affected = state.participants.filter(p => p.itemIds.includes(itemToClear.id));
+            const affected = (state.participants || []).filter(p => (p.itemIds || []).includes(itemToClear.id));
             if (affected.length > 0) {
                 const updated = affected.map(p => {
-                    const newItemIds = p.itemIds.filter(id => id !== itemToClear.id);
+                    const newItemIds = (p.itemIds || []).filter(id => id !== itemToClear.id);
                     const newItemGroups = { ...(p.itemGroups || {}) };
                     delete newItemGroups[itemToClear.id];
                     const nextLeaders = (p.groupLeaderItemIds || []).filter(id => id !== itemToClear.id);
@@ -702,12 +702,12 @@ const ItemEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ onTrigger
     return (
         <Card title="Enrollment by Events" action={<button onClick={onTriggerSelection} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all active:scale-95"><ListCheck size={14} strokeWidth={3}/> Add Assignment</button>}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredItems.map(item => {
-                    const category = state.categories.find(c => c.id === item.categoryId);
+                {(filteredItems || []).map(item => {
+                    const category = (state.categories || []).find(c => c.id === item.categoryId);
                     const theme = getCategoryTheme(category?.name || '');
-                    const enrolledCount = state.participants.filter(p => p.itemIds.includes(item.id)).length;
+                    const enrolledCount = (state.participants || []).filter(p => (p.itemIds || []).includes(item.id)).length;
                     const maxPossiblePerTeam = item.type === ItemType.GROUP ? ((item.maxGroupsPerTeam || 1) * item.maxParticipants) : item.maxParticipants;
-                    const maxPossible = state.teams.length * maxPossiblePerTeam;
+                    const maxPossible = (state.teams || []).length * maxPossiblePerTeam;
 
                     return (
                         <div key={item.id} className="relative p-5 rounded-[2rem] border-2 border-zinc-100 dark:border-white/5 bg-white dark:bg-[#151816] transition-all hover:border-indigo-500/20 group cursor-default text-zinc-900 dark:text-zinc-100">
@@ -783,13 +783,13 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
 
     const filteredParticipants = useMemo(() => {
         if (!state) return [];
-        return state.participants.filter(p => {
-            const matchesSearch = p.name.toLowerCase().includes(globalSearchTerm.toLowerCase()) || 
-                                 p.chestNumber.toLowerCase().includes(globalSearchTerm.toLowerCase());
-            const matchesTeam = globalFilters.teamId.length > 0 ? globalFilters.teamId.includes(p.teamId) : true;
-            const matchesCategory = globalFilters.categoryId.length > 0 ? globalFilters.categoryId.includes(p.categoryId) : true;
+        return (state.participants || []).filter(p => {
+            const matchesSearch = (p.name || '').toLowerCase().includes(globalSearchTerm.toLowerCase()) || 
+                                 (p.chestNumber || '').toLowerCase().includes(globalSearchTerm.toLowerCase());
+            const matchesTeam = (globalFilters?.teamId || []).length > 0 ? (globalFilters?.teamId || []).includes(p.teamId) : true;
+            const matchesCategory = (globalFilters?.categoryId || []).length > 0 ? (globalFilters?.categoryId || []).includes(p.categoryId) : true;
             return matchesSearch && matchesTeam && matchesCategory;
-        }).sort((a,b) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
+        }).sort((a,b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, {numeric: true}));
     }, [state, globalSearchTerm, globalFilters]);
 
     const handleClearParticipantPrograms = async () => {
@@ -818,23 +818,24 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
     return (
         <Card title="Enrollment by Delegates" action={<button onClick={onTriggerSelection} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all active:scale-95"><UserCheck size={14} strokeWidth={3}/> Add Enrollment</button>}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredParticipants.map(p => {
-                    const team = state.teams.find(t => t.id === p.teamId);
-                    const category = state.categories.find(c => c.id === p.categoryId);
+                {(filteredParticipants || []).map(p => {
+                    const team = (state.teams || []).find(t => t.id === p.teamId);
+                    const category = (state.categories || []).find(c => c.id === p.categoryId);
                     const theme = getCategoryTheme(category?.name || '');
+                    const enrolledItemCount = (p.itemIds || []).length;
 
                     return (
                         <div key={p.id} className="relative p-5 rounded-[2rem] border-2 border-zinc-100 dark:border-white/5 bg-white dark:bg-[#151816] transition-all hover:border-emerald-500/20 group cursor-default text-zinc-900 dark:text-zinc-100">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-2">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-lg ${getTeamColor(team?.name || '')}`}>{p.name.charAt(0)}</div>
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-lg ${getTeamColor(team?.name || '')}`}>{(p.name || '').charAt(0)}</div>
                                     <div>
                                         <div className="text-[10px] font-black font-mono text-zinc-400">#{p.chestNumber}</div>
                                         <div className="text-[8px] font-black uppercase tracking-widest text-zinc-500 max-w-[100px] truncate">{team?.name}</div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                    {p.itemIds.length > 0 && (
+                                    {enrolledItemCount > 0 && (
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); setParticipantToClear(p); }} 
                                             title="Remove all enrolled programmes and make it zero" 
@@ -853,14 +854,14 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
                             <div className={`inline-block px-2.5 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest border ${theme.border} ${theme.bg} ${theme.text}`}>{category?.name}</div>
                             <div className="pt-4 mt-4 border-t border-zinc-50 dark:border-white/5 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${p.itemIds.length > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-200'}`}></div>
-                                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{p.itemIds.length} Events Registry</span>
+                                    <div className={`w-2 h-2 rounded-full ${enrolledItemCount > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-zinc-200'}`}></div>
+                                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{enrolledItemCount} Events Registry</span>
                                 </div>
-                                {p.itemIds.length > 0 && (
+                                {enrolledItemCount > 0 && (
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); setParticipantToClear(p); }}
                                         className="text-[9px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                        title="Remove all enrolled programs (Reset to 0)"
+                                        title="Remove all enrolled programs for this participant (Reset to 0)"
                                     >
                                         <Trash2 size={12}/> Reset to 0
                                     </button>
@@ -875,7 +876,7 @@ const ParticipantEntryView: React.FC<{ onTriggerSelection: () => void }> = ({ on
                 <ConfirmModal 
                     isOpen={!!participantToClear}
                     title="Remove All Enrolled Programmes"
-                    message={`Are you sure you want to remove all ${participantToClear.itemIds.length} enrolled programmes for "${participantToClear.name}" (#${participantToClear.chestNumber})? This will make their enrolled count 0.`}
+                    message={`Are you sure you want to remove all ${(participantToClear.itemIds || []).length} enrolled programmes for "${participantToClear.name}" (#${participantToClear.chestNumber})? This will make their enrolled count 0.`}
                     confirmText="Remove All (Reset to 0)"
                     cancelText="Cancel"
                     variant="danger"

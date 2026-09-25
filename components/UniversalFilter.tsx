@@ -14,7 +14,7 @@ interface MultiSelectProps {
     icon?: React.ElementType;
 }
 
-const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedIds, onChange, disabled, icon: Icon }) => {
+const MultiSelect: React.FC<MultiSelectProps> = ({ label, options = [], selectedIds = [], onChange, disabled, icon: Icon }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -28,12 +28,15 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedIds, 
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const safeOptions = options || [];
+    const safeSelected = selectedIds || [];
+
     const toggleOption = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (disabled) return;
-        const next = selectedIds.includes(id) 
-            ? selectedIds.filter(v => v !== id)
-            : [...selectedIds, id];
+        const next = safeSelected.includes(id) 
+            ? safeSelected.filter(v => v !== id)
+            : [...safeSelected, id];
         onChange(next);
     };
 
@@ -44,16 +47,16 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedIds, 
 
     const handleSelectAll = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (selectedIds.length === options.length) onChange([]);
-        else onChange(options.map(o => o.id));
+        if (safeSelected.length === safeOptions.length) onChange([]);
+        else onChange(safeOptions.map(o => o.id));
     };
 
     const summary = useMemo(() => {
-        if (selectedIds.length === 0) return `All ${label}s`;
-        if (selectedIds.length === 1) return options.find(o => o.id === selectedIds[0])?.name || selectedIds[0];
-        if (selectedIds.length === options.length) return `All ${label}s`;
-        return `${selectedIds.length} ${label}s`;
-    }, [selectedIds, options, label]);
+        if (safeSelected.length === 0) return `All ${label}s`;
+        if (safeSelected.length === 1) return safeOptions.find(o => o.id === safeSelected[0])?.name || safeSelected[0];
+        if (safeSelected.length === safeOptions.length) return `All ${label}s`;
+        return `${safeSelected.length} ${label}s`;
+    }, [safeSelected, safeOptions, label]);
 
     return (
         <div className="relative" ref={dropdownRef}>
@@ -63,7 +66,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedIds, 
                 disabled={disabled}
                 className={`flex items-center justify-between w-full sm:w-48 appearance-none rounded-xl border py-2 pl-3 pr-4 text-xs font-bold transition-all shadow-inner
                     ${disabled ? 'opacity-50 cursor-not-allowed bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border-zinc-200 dark:border-zinc-700' : 
-                    selectedIds.length > 0 ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' :
+                    safeSelected.length > 0 ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' :
                     'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500'}`}
             >
                 <div className="flex items-center gap-2 truncate pr-2">
@@ -78,12 +81,12 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedIds, 
                     <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between">
                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 pl-2">Filter {label}</span>
                          <button onClick={handleSelectAll} className="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
-                            {selectedIds.length === options.length ? 'Clear All' : 'Select All'}
+                            {safeSelected.length === safeOptions.length ? 'Clear All' : 'Select All'}
                          </button>
                     </div>
                     <div className="max-h-64 overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
-                        {options.map((opt) => {
-                            const isChecked = selectedIds.includes(opt.id);
+                        {safeOptions.map((opt) => {
+                            const isChecked = safeSelected.includes(opt.id);
                             const OptionIcon = opt.icon;
                             return (
                                 <div 
@@ -131,23 +134,24 @@ const UniversalFilter: React.FC<UniversalFilterProps> = ({ pageTitle }) => {
     const isPointsPage = pageTitle === TABS.POINTS;
 
     const activeCount = [
-        !isScoringPage && !isTeamLeader && !isSchedulePage && !isCodesPage && globalFilters.teamId.length > 0,
-        isScoringPage && globalFilters.status.length > 0,
-        isSchedulePage && globalFilters.date.length > 0,
-        isSchedulePage && globalFilters.stage.length > 0,
-        isCodesPage && globalFilters.assignmentStatus.length > 0,
-        globalFilters.categoryId.length > 0,
-        globalFilters.performanceType.length > 0,
-        globalFilters.itemType.length > 0,
-        showItemFilter && globalFilters.itemId.length > 0
+        !isScoringPage && !isTeamLeader && !isSchedulePage && !isCodesPage && (globalFilters?.teamId || []).length > 0,
+        isScoringPage && (globalFilters?.status || []).length > 0,
+        isSchedulePage && (globalFilters?.date || []).length > 0,
+        isSchedulePage && (globalFilters?.stage || []).length > 0,
+        isCodesPage && (globalFilters?.assignmentStatus || []).length > 0,
+        (globalFilters?.categoryId || []).length > 0,
+        (globalFilters?.performanceType || []).length > 0,
+        (globalFilters?.itemType || []).length > 0,
+        showItemFilter && (globalFilters?.itemId || []).length > 0
     ].filter(Boolean).length;
 
     const filteredItems = useMemo(() => {
         if (!state) return [];
-        return state.items
-            .filter(i => globalFilters.categoryId.length === 0 || globalFilters.categoryId.includes(i.categoryId))
+        const catFilter = globalFilters?.categoryId || [];
+        return (state.items || [])
+            .filter(i => catFilter.length === 0 || catFilter.includes(i.categoryId))
             .sort((a,b) => a.name.localeCompare(b.name));
-    }, [state?.items, globalFilters.categoryId]);
+    }, [state?.items, globalFilters?.categoryId]);
 
     const handleReset = () => {
         setGlobalFilters({
@@ -166,9 +170,9 @@ const UniversalFilter: React.FC<UniversalFilterProps> = ({ pageTitle }) => {
 
     if (!state) return null;
 
-    const teamOptions = state.teams.map(t => ({ id: t.id, name: t.name }));
-    const categoryOptions = state.categories.map(c => ({ id: c.id, name: c.name }));
-    const itemOptions = filteredItems.map(i => ({ id: i.id, name: i.name }));
+    const teamOptions = (state.teams || []).map(t => ({ id: t.id, name: t.name }));
+    const categoryOptions = (state.categories || []).map(c => ({ id: c.id, name: c.name }));
+    const itemOptions = (filteredItems || []).map(i => ({ id: i.id, name: i.name }));
     const performanceOptions = [
         { id: PerformanceType.ON_STAGE, name: 'On Stage', icon: MapPin },
         { id: PerformanceType.OFF_STAGE, name: 'Off Stage', icon: MapPin }
@@ -189,8 +193,8 @@ const UniversalFilter: React.FC<UniversalFilterProps> = ({ pageTitle }) => {
     ];
     
     // Schedule specific options
-    const dateOptions = (state.settings.eventDays || []).map(d => ({ id: d, name: d }));
-    const stageOptions = (state.settings.stages || []).map(s => ({ id: s, name: s }));
+    const dateOptions = (state?.settings?.eventDays || []).map(d => ({ id: d, name: d }));
+    const stageOptions = (state?.settings?.stages || []).map(s => ({ id: s, name: s }));
 
     const DesktopFilterContent = () => (
         <div className="flex flex-row gap-2.5 items-center bg-white/30 dark:bg-black/20 p-1.5 rounded-2xl border border-amazio-primary/5 dark:border-white/5 backdrop-blur-md">

@@ -385,11 +385,11 @@ const TeamFormModal: React.FC<TeamFormModalProps> = ({ isOpen, onClose, onSave, 
                                 <>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Assign Leader</label>
-                                        <select value={selectedLeaderId || ''} onChange={(e) => setSelectedLeaderId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <select value={selectedLeaderId || ''} onChange={(e) => setSelectedLeaderId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{(existingParticipants || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                                     </div>
                                     <div>
                                         <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-400 mb-1.5">Assign Assistant</label>
-                                        <select value={selectedAssistantId || ''} onChange={(e) => setSelectedAssistantId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{existingParticipants.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <select value={selectedAssistantId || ''} onChange={(e) => setSelectedAssistantId(e.target.value)} className="w-full px-4 py-3 bg-white dark:bg-zinc-900 rounded-xl text-sm font-bold outline-none appearance-none cursor-pointer border-none shadow-sm"><option value="">-- No Selection --</option>{(existingParticipants || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                                     </div>
                                 </>
                             )}
@@ -510,7 +510,7 @@ const TeamsAndCategories: React.FC = () => {
         else await addMultipleTeams([newTeam]);
 
         // 2. Clear existing roles for this team (Omit the role property entirely)
-        const teamParticipants = state.participants.filter(p => p.teamId === teamId);
+        const teamParticipants = (state.participants || []).filter(p => p.teamId === teamId);
         const updates: Participant[] = teamParticipants.map(p => {
             const { role, ...rest } = p;
             return rest;
@@ -524,7 +524,7 @@ const TeamsAndCategories: React.FC = () => {
                 const idx = updates.findIndex(u => u.id === leader.id);
                 if (idx !== -1) updates[idx].role = 'leader';
                 else {
-                    const p = state.participants.find(part => part.id === leader.id);
+                    const p = (state.participants || []).find(part => part.id === leader.id);
                     if (p) updates.push({ ...p, role: 'leader' });
                 }
             } else {

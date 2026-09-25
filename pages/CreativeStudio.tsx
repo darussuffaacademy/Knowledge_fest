@@ -114,7 +114,7 @@ const PosterCanvas: React.FC<{
                     Using leading-none and explicit padding/margins for consistent rasterization across environments.
                  */}
                 <div className="mt-[30px] ml-[205px] pr-[110px] space-y-[30px]">
-                    {data.winners.slice(0, 3).map((winner, idx) => (
+                    {(data.winners || []).slice(0, 3).map((winner, idx) => (
                         <div key={idx} className="min-w-0 flex flex-col">
                             <h4 
                                 className={`text-[46px] font-black uppercase tracking-tighter leading-tight text-[#C21D2E] whitespace-nowrap mb-1 ${isDownloadMode ? 'overflow-visible' : 'truncate'}`} 
@@ -179,10 +179,12 @@ const CreativeStudio: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
 
     const declaredItems = useMemo(() => {
         if (!state) return [];
-        return state.results
+        const results = state.results || [];
+        const items = state.items || [];
+        return results
             .filter(r => r.status === ResultStatus.DECLARED)
             .map(r => {
-                const item = state.items.find(i => i.id === r.itemId);
+                const item = items.find(i => i.id === r.itemId);
                 return item ? {
                     id: r.itemId,
                     name: item.name,
@@ -211,24 +213,28 @@ const CreativeStudio: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
         if (listIndex === -1) return null;
 
         const result = declaredItems[listIndex].result;
-        const item = state.items.find(i => i.id === selectedItemId);
-        const category = state.categories.find(c => c.id === item?.categoryId);
+        const items = state.items || [];
+        const categories = state.categories || [];
+        const participants = state.participants || [];
+        const teams = state.teams || [];
+        const item = items.find(i => i.id === selectedItemId);
+        const category = categories.find(c => c.id === item?.categoryId);
         
-        const winners = result.winners
+        const winners = (result?.winners || [])
             .filter((w: any) => w.position > 0)
             .sort((a: any, b: any) => a.position - b.position)
             .map((w: any) => {
-                const p = state.participants.find(part => part.id === w.participantId);
-                const t = state.teams.find(team => team.id === p?.teamId);
+                const p = participants.find(part => part.id === w.participantId);
+                const t = teams.find(team => team.id === p?.teamId);
                 
                 let pointsWon = 0;
-                if (w.position === 1) pointsWon += item?.points.first || 0;
-                else if (w.position === 2) pointsWon += item?.points.second || 0;
-                else if (w.position === 3) pointsWon += item?.points.third || 0;
+                if (w.position === 1) pointsWon += item?.points?.first || 0;
+                else if (w.position === 2) pointsWon += item?.points?.second || 0;
+                else if (w.position === 3) pointsWon += item?.points?.third || 0;
 
-                const gConfig = item?.type === ItemType.SINGLE ? state.gradePoints.single : state.gradePoints.group;
+                const gConfig = item?.type === ItemType.SINGLE ? (state.gradePoints?.single || []) : (state.gradePoints?.group || []);
                 const g = w.gradeId ? gConfig.find(grade => grade.id === w.gradeId) : null;
-                if (g) pointsWon += (item?.gradePointsOverride?.[g.id] ?? g.points);
+                if (g) pointsWon += (item?.gradePointsOverride?.[g.id] ?? (g.points || 0));
 
                 return {
                     rank: w.position,

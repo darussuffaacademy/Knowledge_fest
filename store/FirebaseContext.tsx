@@ -1,9 +1,28 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { doc, onSnapshot, setDoc, updateDoc, collection } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
-import { AppState, User, UserRole, ItemType, ResultStatus, Result, TabulationEntry, ScheduledEvent, Team, Grade, Judge, CodeLetter, Participant, JudgeAssignment, Category, Item, PerformanceType, FontConfig, GeneralFontConfig, Template, Settings } from '../types';
+import { AppState, User, UserRole, ItemType, ResultStatus, Result, TabulationEntry, ScheduledEvent, Team, Grade, Judge, CodeLetter, Participant, JudgeAssignment, Category, Item, PerformanceType, FontConfig, GeneralFontConfig, Template, Settings, Edition } from '../types';
 import { DEFAULT_PAGE_PERMISSIONS, TABS, GUEST_PERMISSIONS } from '../constants';
+
+const DEFAULT_EDITIONS: Edition[] = [
+  {
+    id: 'edition_1',
+    editionNumber: 1,
+    name: 'Amazio Knowledge Fest 2026',
+    year: '2026',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    isArchived: false,
+  },
+  {
+    id: 'edition_2',
+    editionNumber: 2,
+    name: 'Amazio Knowledge Fest 2027',
+    year: '2027',
+    createdAt: '2026-09-01T00:00:00.000Z',
+    isArchived: false,
+  }
+];
 
 const defaultState: AppState = {
   settings: {
@@ -193,6 +212,13 @@ interface FirebaseContextType {
   restoreData: (file: File) => Promise<void>;
   resetSystem: () => Promise<void>;
   resetPoints: () => Promise<void>;
+  activeEditionId: string;
+  activeEdition: Edition;
+  editions: Edition[];
+  switchEdition: (id: string) => Promise<void>;
+  createEdition: (payload: { name: string; editionNumber: number; year: string | number; copyStructure?: boolean }) => Promise<void>;
+  updateEdition: (payload: Edition) => Promise<void>;
+  deleteEdition: (id: string) => Promise<void>;
 }
 
 const defaultContextValue: FirebaseContextType = {
@@ -201,6 +227,13 @@ const defaultContextValue: FirebaseContextType = {
   firebaseUser: null,
   loading: false,
   isOnline: true,
+  activeEditionId: 'edition_1',
+  activeEdition: DEFAULT_EDITIONS[0],
+  editions: DEFAULT_EDITIONS,
+  switchEdition: async () => {},
+  createEdition: async () => {},
+  updateEdition: async () => {},
+  deleteEdition: async () => {},
   globalFilters: { teamId: [], categoryId: [], performanceType: [], itemType: [], itemId: [], status: [], date: [], stage: [], assignmentStatus: [] },
   setGlobalFilters: () => {},
   globalSearchTerm: '',
@@ -311,6 +344,29 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [judgesSubView, setJudgesSubView] = useState<'ASSIGNMENTS' | 'REGISTRY' | 'OVERVIEW'>('ASSIGNMENTS');
   const [settingsSubView, setSettingsSubView] = useState('details');
 
+  const [editions, setEditions] = useState<Edition[]>(() => {
+    try {
+      const saved = localStorage.getItem('artfest_editions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_EDITIONS;
+  });
+
+  const [activeEditionId, setActiveEditionId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('artfest_active_edition');
+      if (saved) return saved;
+    } catch {}
+    return 'edition_1';
+  });
+
+  const activeEdition = useMemo(() => {
+    return editions.find(e => e.id === activeEditionId) || editions[0] || DEFAULT_EDITIONS[0];
+  }, [editions, activeEditionId]);
+
   useEffect(() => {
     const handleStatusChange = () => setIsOnline(navigator.onLine);
     window.addEventListener('online', handleStatusChange);
@@ -351,20 +407,39 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
                 ...current,
                 settings: {
                   ...current.settings,
-                  ...(value || {})
+                  ...(value && typeof value === 'object' ? value : {})
                 }
               };
           }
 
-          if (key === 'codeLetters' && Array.isArray(value)) {
-              const sanitizedCodes = value.map((c: any, idx: number) => ({
+          if (key === 'gradePoints') {
+              const defaultGrades = defaultState.gradePoints;
+              return {
+                  ...current,
+                  gradePoints: {
+                      single: Array.isArray(value?.single) ? value.single : defaultGrades.single,
+                      group: Array.isArray(value?.group) ? value.group : defaultGrades.group,
+                  }
+              };
+          }
+
+          if (key === 'codeLetters') {
+              const valList = Array.isArray(value) ? value : defaultState.codeLetters;
+              const sanitizedCodes = valList.map((c: any, idx: number) => ({
                   ...c,
-                  id: c.id || `c_${c.code || 'code'}_${idx}_${Date.now()}`
+                  id: c?.id || `c_${c?.code || 'code'}_${idx}_${Date.now()}`
               }));
               return { ...current, codeLetters: sanitizedCodes };
           }
 
-          return { ...current, [key]: value !== null ? value : (defaultState as any)[key] };
+          const defaultValue = (defaultState as any)[key];
+          let resolvedValue = (value !== null && value !== undefined) ? value : defaultValue;
+
+          if (Array.isArray(defaultValue) && !Array.isArray(resolvedValue)) {
+              resolvedValue = defaultValue;
+          }
+
+          return { ...current, [key]: resolvedValue };
         });
         setLoadingMap(prev => ({ ...prev, [key]: false }));
       }, (e) => {
@@ -377,10 +452,62 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, []);
 
   useEffect(() => {
+    const unsub = onSnapshot(doc(db, BASE_COLLECTION, 'editions'), (snap) => {
+      const data = snap.data();
+      if (data && Array.isArray(data.value) && data.value.length > 0) {
+        setEditions(data.value);
+        try { localStorage.setItem('artfest_editions', JSON.stringify(data.value)); } catch {}
+      }
+    }, (err) => {
+      console.warn('Editions listener fallback to local state', err);
+    });
+    return () => unsub();
+  }, []);
+
+  const switchEdition = async (id: string) => {
+    setActiveEditionId(id);
+    try { localStorage.setItem('artfest_active_edition', id); } catch {}
+  };
+
+  const createEdition = async (payload: { name: string; editionNumber: number; year: string | number; copyStructure?: boolean }) => {
+    const newEd: Edition = {
+      id: `edition_${Date.now()}`,
+      editionNumber: payload.editionNumber,
+      name: payload.name,
+      year: payload.year,
+      createdAt: new Date().toISOString(),
+      isArchived: false,
+    };
+    const nextEditions = [...editions, newEd].sort((a, b) => a.editionNumber - b.editionNumber);
+    setEditions(nextEditions);
+    try { localStorage.setItem('artfest_editions', JSON.stringify(nextEditions)); } catch {}
+    await writeDoc('editions', nextEditions);
+    await switchEdition(newEd.id);
+  };
+
+  const updateEdition = async (payload: Edition) => {
+    const nextEditions = editions.map(e => e.id === payload.id ? payload : e);
+    setEditions(nextEditions);
+    try { localStorage.setItem('artfest_editions', JSON.stringify(nextEditions)); } catch {}
+    await writeDoc('editions', nextEditions);
+  };
+
+  const deleteEdition = async (id: string) => {
+    if (id === 'edition_1') return;
+    const nextEditions = editions.filter(e => e.id !== id);
+    setEditions(nextEditions);
+    try { localStorage.setItem('artfest_editions', JSON.stringify(nextEditions)); } catch {}
+    await writeDoc('editions', nextEditions);
+    if (activeEditionId === id) {
+      await switchEdition(nextEditions[0]?.id || 'edition_1');
+    }
+  };
+
+  useEffect(() => {
     if (state && firebaseUser) {
         const email = firebaseUser.email || '';
         const username = email.split('@')[0].trim().toLowerCase();
-        const appUser = state.users.find(u => u.username.toLowerCase() === username);
+        const appUser = (state.users || []).find(u => u.username.toLowerCase() === username);
         if (appUser) setCurrentUser(appUser);
     } else {
         setCurrentUser(null);
@@ -416,17 +543,20 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   const genericOps = (listName: keyof AppState) => ({
       add: async (payload: any) => {
           if (!state) return;
-          const newList = [...(state[listName] as any[]), { ...payload, id: `${listName}_${Date.now()}` }];
+          const currentList = Array.isArray(state[listName]) ? (state[listName] as any[]) : [];
+          const newList = [...currentList, { ...payload, id: `${listName}_${Date.now()}` }];
           await writeDoc(listName as string, newList);
       },
       update: async (payload: any) => {
           if (!state) return;
-          const newList = (state[listName] as any[]).map(item => item.id === payload.id ? payload : item);
+          const currentList = Array.isArray(state[listName]) ? (state[listName] as any[]) : [];
+          const newList = currentList.map(item => item.id === payload.id ? payload : item);
           await writeDoc(listName as string, newList);
       },
       deleteMultiple: async (ids: string[]) => {
           if (!state) return;
-          const newList = (state[listName] as any[]).filter(item => !ids.includes(item.id));
+          const currentList = Array.isArray(state[listName]) ? (state[listName] as any[]) : [];
+          const newList = currentList.filter(item => !ids.includes(item.id));
           await writeDoc(listName as string, newList);
       }
   });
@@ -479,15 +609,15 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     updateItem: itemOps.update, 
     deleteMultipleItems: async (ids: string[]) => {
         if (!state) return;
-        const newItems = state.items.filter(item => !ids.includes(item.id));
+        const newItems = (state.items || []).filter(item => !ids.includes(item.id));
         const promises: Promise<any>[] = [writeDoc('items', newItems)];
 
         let participantsChanged = false;
-        const newParticipants = state.participants.map(p => {
-            const hasItem = p.itemIds.some(id => ids.includes(id));
+        const newParticipants = (state.participants || []).map(p => {
+            const hasItem = (p.itemIds || []).some(id => ids.includes(id));
             if (!hasItem) return p;
             participantsChanged = true;
-            const nextItemIds = p.itemIds.filter(id => !ids.includes(id));
+            const nextItemIds = (p.itemIds || []).filter(id => !ids.includes(id));
             const nextItemGroups = { ...(p.itemGroups || {}) };
             const nextLeaders = (p.groupLeaderItemIds || []).filter(id => !ids.includes(id));
             const nextChests = { ...(p.groupChestNumbers || {}) };
@@ -507,101 +637,109 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
             promises.push(writeDoc('participants', newParticipants));
         }
 
-        if (state.schedule.some(s => ids.includes(s.itemId))) {
-            const newSchedule = state.schedule.filter(s => !ids.includes(s.itemId));
+        if ((state.schedule || []).some(s => ids.includes(s.itemId))) {
+            const newSchedule = (state.schedule || []).filter(s => !ids.includes(s.itemId));
             promises.push(writeDoc('schedule', newSchedule));
         }
 
-        if (state.judgeAssignments.some(j => ids.includes(j.itemId))) {
-            const newJudgeAssignments = state.judgeAssignments.filter(j => !ids.includes(j.itemId));
+        if ((state.judgeAssignments || []).some(j => ids.includes(j.itemId))) {
+            const newJudgeAssignments = (state.judgeAssignments || []).filter(j => !ids.includes(j.itemId));
             promises.push(writeDoc('judgeAssignments', newJudgeAssignments));
         }
 
-        if (state.tabulation.some(t => ids.includes(t.itemId))) {
-            const newTabulation = state.tabulation.filter(t => !ids.includes(t.itemId));
+        if ((state.tabulation || []).some(t => ids.includes(t.itemId))) {
+            const newTabulation = (state.tabulation || []).filter(t => !ids.includes(t.itemId));
             promises.push(writeDoc('tabulation', newTabulation));
         }
 
-        if (state.results.some(r => ids.includes(r.itemId))) {
-            const newResults = state.results.filter(r => !ids.includes(r.itemId));
+        if ((state.results || []).some(r => ids.includes(r.itemId))) {
+            const newResults = (state.results || []).filter(r => !ids.includes(r.itemId));
             promises.push(writeDoc('results', newResults));
         }
 
         await Promise.all(promises);
     },
     addGrade: async ({ itemType, grade }) => {
-        const list = [...state!.gradePoints[itemType], { ...grade, id: `g_${Date.now()}` }];
-        await writeDoc('gradePoints', { ...state!.gradePoints, [itemType]: list });
+        if (!state) return;
+        const currentGrades = state.gradePoints?.[itemType] || [];
+        const list = [...currentGrades, { ...grade, id: `g_${Date.now()}` }];
+        await writeDoc('gradePoints', { ...(state.gradePoints || { single: [], group: [] }), [itemType]: list });
     },
     updateGrade: async ({ itemType, grade }) => {
-        const list = state!.gradePoints[itemType].map(g => g.id === grade.id ? grade : g);
-        await writeDoc('gradePoints', { ...state!.gradePoints, [itemType]: list });
+        if (!state) return;
+        const currentGrades = state.gradePoints?.[itemType] || [];
+        const list = currentGrades.map(g => g.id === grade.id ? grade : g);
+        await writeDoc('gradePoints', { ...(state.gradePoints || { single: [], group: [] }), [itemType]: list });
     },
     deleteGrade: async ({ itemType, gradeId }) => {
-        const list = state!.gradePoints[itemType].filter(g => g.id !== gradeId);
-        await writeDoc('gradePoints', { ...state!.gradePoints, [itemType]: list });
+        if (!state) return;
+        const currentGrades = state.gradePoints?.[itemType] || [];
+        const list = currentGrades.filter(g => g.id !== gradeId);
+        await writeDoc('gradePoints', { ...(state.gradePoints || { single: [], group: [] }), [itemType]: list });
     },
-    addCodeLetter: async (p) => writeDoc('codeLetters', [...state!.codeLetters, { ...p, id: p.id || `c_${p.code || Date.now()}_${Date.now()}` }]),
+    addCodeLetter: async (p) => writeDoc('codeLetters', [...(state?.codeLetters || []), { ...p, id: (p as any).id || `c_${p.code || Date.now()}_${Date.now()}` }]),
     addMultipleCodeLetters: async (p) => {
-        const itemsWithId = p.map((item, idx) => ({
+        const itemsWithId = (p || []).map((item, idx) => ({
             ...item,
             id: item.id || `c_${item.code || 'code'}_${Date.now()}_${idx}`
         }));
-        return writeDoc('codeLetters', [...state!.codeLetters, ...itemsWithId]);
+        return writeDoc('codeLetters', [...(state?.codeLetters || []), ...itemsWithId]);
     },
-    updateCodeLetter: async (p) => writeDoc('codeLetters', state!.codeLetters.map(c => c.id === p.id ? p : c)),
+    updateCodeLetter: async (p) => writeDoc('codeLetters', (state?.codeLetters || []).map(c => c.id === p.id ? p : c)),
     reorderCodeLetters: (p) => writeDoc('codeLetters', p),
-    deleteCodeLetter: async (id) => writeDoc('codeLetters', state!.codeLetters.filter(c => c.id !== id)),
-    deleteMultipleCodeLetters: async (ids) => writeDoc('codeLetters', state!.codeLetters.filter(c => !ids.includes(c.id))),
-    addJudge: async (p) => writeDoc('judges', [...state!.judges, { ...p, id: `j_${Date.now()}` }]),
-    updateJudge: async (p) => writeDoc('judges', state!.judges.map(j => j.id === p.id ? p : j)),
+    deleteCodeLetter: async (id) => writeDoc('codeLetters', (state?.codeLetters || []).filter(c => c.id !== id)),
+    deleteMultipleCodeLetters: async (ids) => writeDoc('codeLetters', (state?.codeLetters || []).filter(c => !ids.includes(c.id))),
+    addJudge: async (p) => writeDoc('judges', [...(state?.judges || []), { ...p, id: `j_${Date.now()}` }]),
+    updateJudge: async (p) => writeDoc('judges', (state?.judges || []).map(j => j.id === p.id ? p : j)),
     reorderJudges: (p) => writeDoc('judges', p),
-    deleteMultipleJudges: async (ids) => writeDoc('judges', state!.judges.filter(j => !ids.includes(j.id))),
+    deleteMultipleJudges: async (ids) => writeDoc('judges', (state?.judges || []).filter(j => !ids.includes(j.id))),
     updateItemJudges: async (p) => {
-        const assignments = state!.judgeAssignments.filter(a => a.itemId !== p.itemId);
+        const assignments = (state?.judgeAssignments || []).filter(a => a.itemId !== p.itemId);
         assignments.push({ ...p, id: `${p.itemId}-${p.categoryId}` });
         await writeDoc('judgeAssignments', assignments);
     },
     setJudgeAssignments: (p) => writeDoc('judgeAssignments', p),
-    addParticipant: partOps.add, addMultipleParticipants: async (p) => writeDoc('participants', [...state!.participants, ...p]),
-    updateParticipant: partOps.update, updateMultipleParticipants: async (p) => {
-        const map = new Map(p.map(x => [x.id, x]));
-        const next = state!.participants.map(x => map.has(x.id) ? map.get(x.id)! : x);
+    addParticipant: partOps.add, 
+    addMultipleParticipants: async (p) => writeDoc('participants', [...(state?.participants || []), ...(p || [])]),
+    updateParticipant: partOps.update, 
+    updateMultipleParticipants: async (p) => {
+        const map = new Map((p || []).map(x => [x.id, x]));
+        const next = (state?.participants || []).map(x => map.has(x.id) ? map.get(x.id)! : x);
         await writeDoc('participants', next);
     },
     deleteMultipleParticipants: async (ids: string[]) => {
         if (!state) return;
-        const newParticipants = state.participants.filter(p => !ids.includes(p.id));
+        const newParticipants = (state.participants || []).filter(p => !ids.includes(p.id));
         const promises: Promise<any>[] = [writeDoc('participants', newParticipants)];
-        if (state.tabulation.some(t => ids.includes(t.participantId))) {
-            const newTabulation = state.tabulation.filter(t => !ids.includes(t.participantId));
+        if ((state.tabulation || []).some(t => ids.includes(t.participantId))) {
+            const newTabulation = (state.tabulation || []).filter(t => !ids.includes(t.participantId));
             promises.push(writeDoc('tabulation', newTabulation));
         }
         await Promise.all(promises);
     },
     setSchedule: (p) => writeDoc('schedule', p),
-    addScheduleEvent: async (p) => writeDoc('schedule', [...state!.schedule, p]),
+    addScheduleEvent: async (p) => writeDoc('schedule', [...(state?.schedule || []), p]),
     updateTabulationEntry: async (p) => {
-        const next = state!.tabulation.filter(t => t.id !== p.id);
+        const next = (state?.tabulation || []).filter(t => t.id !== p.id);
         next.push(p);
         await writeDoc('tabulation', next);
     },
     updateMultipleTabulationEntries: async (p) => {
-        const map = new Map(p.map(x => [x.id, x]));
-        const next = state!.tabulation.map(x => map.has(x.id) ? map.get(x.id)! : x);
-        p.forEach(x => { if(!state!.tabulation.find(t=>t.id===x.id)) next.push(x); });
+        const map = new Map((p || []).map(x => [x.id, x]));
+        const next = (state?.tabulation || []).map(x => map.has(x.id) ? map.get(x.id)! : x);
+        (p || []).forEach(x => { if(!(state?.tabulation || []).find(t=>t.id===x.id)) next.push(x); });
         await writeDoc('tabulation', next);
     },
-    deleteEventTabulation: async (itemId) => writeDoc('tabulation', state!.tabulation.filter(t => t.itemId !== itemId)),
+    deleteEventTabulation: async (itemId) => writeDoc('tabulation', (state?.tabulation || []).filter(t => t.itemId !== itemId)),
     saveResult: async (payload: Result) => {
         if (!state) return;
-        const nextResults = state.results.filter(r => r.itemId !== payload.itemId);
+        const nextResults = (state.results || []).filter(r => r.itemId !== payload.itemId);
         nextResults.push(payload);
         await writeDoc('results', nextResults);
     },
-    addUser: async (p) => writeDoc('users', [...state!.users, { ...p, id: `u_${Date.now()}` }]),
-    updateUser: async (p) => writeDoc('users', state!.users.map(u => u.id === p.id ? p : u)),
-    deleteUser: async (id) => writeDoc('users', state!.users.filter(u => u.id !== id)),
+    addUser: async (p) => writeDoc('users', [...(state?.users || []), { ...p, id: `u_${Date.now()}` }]),
+    updateUser: async (p) => writeDoc('users', (state?.users || []).map(u => u.id === p.id ? p : u)),
+    deleteUser: async (id) => writeDoc('users', (state?.users || []).filter(u => u.id !== id)),
     updatePermissions: async ({ role, pages }) => writeDoc('permissions', { ...state?.permissions, [role]: pages }),
     updateInstruction: async ({ page, text }) => writeDoc('instructions', { ...state?.instructions, [page]: text }),
     hasPermission: (tab) => {
@@ -654,7 +792,14 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     resetPoints: async () => {
         if (!state) return;
         await writeDoc('results', []);
-    }
+    },
+    activeEditionId,
+    activeEdition,
+    editions,
+    switchEdition,
+    createEdition,
+    updateEdition,
+    deleteEdition
   };
 
   return (

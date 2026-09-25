@@ -118,8 +118,8 @@ export const GroupEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; e
 
     if (!isOpen || !state || !entry) return null;
 
-    const members = state.participants.filter(p => 
-        p.teamId === entry.teamId && p.itemIds.includes(entry.itemId) && (p.itemGroups?.[entry.itemId] || 1) === entry.groupIndex
+    const members = (state?.participants || []).filter(p => 
+        p.teamId === entry.teamId && (p.itemIds || []).includes(entry.itemId) && (p.itemGroups?.[entry.itemId] || 1) === entry.groupIndex
     );
 
     const handleSave = async () => {
@@ -152,7 +152,7 @@ export const GroupEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; e
         try {
             if (members.length > 0) {
                 const updates: Participant[] = members.map(m => {
-                    const nextItemIds = m.itemIds.filter(id => id !== entry.itemId);
+                    const nextItemIds = (m.itemIds || []).filter(id => id !== entry.itemId);
                     const nextItemGroups = { ...(m.itemGroups || {}) };
                     delete nextItemGroups[entry.itemId];
                     const nextLeaders = (m.groupLeaderItemIds || []).filter(id => id !== entry.itemId);
@@ -195,7 +195,7 @@ export const GroupEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; e
                         <div className="relative">
                             <select value={leaderId || ''} onChange={e => setLeaderId(e.target.value)} className={selectClasses}>
                                 <option value="">-- Select Leader --</option>
-                                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                {(members || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                             <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                         </div>
@@ -203,7 +203,7 @@ export const GroupEntryModal: React.FC<{ isOpen: boolean; onClose: () => void; e
                     <div>
                         <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2 ml-1">Members ({members.length})</label>
                         <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                            {members.map(m => (
+                            {(members || []).map(m => (
                                 <div key={m.id} className="text-xs font-bold p-2 bg-zinc-50 dark:bg-white/5 rounded-lg border border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
                                     <span className="dark:text-zinc-200">{m.name}</span>
                                     <span className="text-[10px] text-zinc-400">#{m.chestNumber}</span>
@@ -322,7 +322,7 @@ export const ItemFormModal: React.FC<{
                             <div className="relative">
                                 <select value={formData.categoryId || ''} onChange={e => setFormData({...formData, categoryId: e.target.value})} className={selectClasses}>
                                     <option value="">Select Level</option>
-                                    {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    {(state.categories || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                                 <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                             </div>
@@ -519,7 +519,7 @@ export const ParticipantFormModal: React.FC<{
                                 <div className="relative">
                                     <select value={formData.teamId || ''} onChange={e => setFormData({...formData, teamId: e.target.value})} className={selectClasses}>
                                         <option value="">Select Team</option>
-                                        {state.teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        {(state.teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                     </select>
                                     <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                                 </div>
@@ -530,7 +530,7 @@ export const ParticipantFormModal: React.FC<{
                                 <div className="relative">
                                     <select value={formData.categoryId || ''} onChange={e => setFormData({...formData, categoryId: e.target.value})} className={selectClasses}>
                                         <option value="">Select Level</option>
-                                        {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        {(state.categories || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                     <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                                 </div>
@@ -722,41 +722,41 @@ const ItemsManagement: React.FC = () => {
 
     const handleItemSort = (newKey: ItemSortKey) => { setItemSort(prev => ({ sortKey: newKey, dir: prev.sortKey === newKey && prev.dir === 'asc' ? 'desc' : 'asc' })); };
     const isAllItemsVisibleSelected = useMemo(() => filteredAndSortedItems.length > 0 && filteredAndSortedItems.every(i => selectedItems.has(i.id)), [filteredAndSortedItems, selectedItems]);
-    const toggleAllItemsSelect = () => setSelectedItems(isAllItemsVisibleSelected ? new Set() : new Set(filteredAndSortedItems.map(i => i.id)));
+    const toggleAllItemsSelect = () => setSelectedItems(isAllItemsVisibleSelected ? new Set() : new Set((filteredAndSortedItems || []).map(i => i.id)));
 
     // --- Unified Registry Logic (Individuals + Groups) ---
     const registryEntries = useMemo(() => {
         if (!state) return [];
-        const { participants, items, teams, categories } = state;
-        const entries: any[] = participants.map(p => ({
+        const { participants = [], items = [], teams = [], categories = [] } = state;
+        const entries: any[] = (participants || []).map(p => ({
             ...p, entryType: 'INDIVIDUAL', displayName: p.name,
-            displayCategory: categories.find(c => c.id === p.categoryId)?.name || 'N/A',
-            displayTeam: teams.find(t => t.id === p.teamId)?.name || 'N/A',
+            displayCategory: (categories || []).find(c => c.id === p.categoryId)?.name || 'N/A',
+            displayTeam: (teams || []).find(t => t.id === p.teamId)?.name || 'N/A',
             sortName: p.name, sortChest: p.chestNumber,
             role: p.role // leader or assistant
         }));
 
-        items.filter(i => i.type === ItemType.GROUP).forEach(item => {
-            teams.forEach(team => {
+        (items || []).filter(i => i.type === ItemType.GROUP).forEach(item => {
+            (teams || []).forEach(team => {
                 const maxGroups = item.maxGroupsPerTeam || 1;
                 const activeGroupsIndices: number[] = [];
                 for (let gIdx = 1; gIdx <= maxGroups; gIdx++) {
-                    const hasMembers = participants.some(p => p.teamId === team.id && p.itemIds.includes(item.id) && (p.itemGroups?.[item.id] || 1) === gIdx);
+                    const hasMembers = (participants || []).some(p => p.teamId === team.id && (p.itemIds || []).includes(item.id) && (p.itemGroups?.[item.id] || 1) === gIdx);
                     if (hasMembers) activeGroupsIndices.push(gIdx);
                 }
                 activeGroupsIndices.forEach(gIdx => {
-                    const members = participants.filter(p => p.teamId === team.id && p.itemIds.includes(item.id) && (p.itemGroups?.[item.id] || 1) === gIdx);
-                    const leader = members.find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
-                    const groupChest = leader.groupChestNumbers?.[item.id] || '';
+                    const members = (participants || []).filter(p => p.teamId === team.id && (p.itemIds || []).includes(item.id) && (p.itemGroups?.[item.id] || 1) === gIdx);
+                    const leader = members.find(p => (p.groupLeaderItemIds || []).includes(item.id)) || members[0] || ({} as any);
+                    const groupChest = leader?.groupChestNumbers?.[item.id] || '';
                     const suffix = activeGroupsIndices.length > 1 ? ` (G${gIdx})` : '';
                     const groupDisplayName = `${item.name}${suffix}`;
                     entries.push({
                         id: `group_${item.id}_${team.id}_${gIdx}`, itemId: item.id, teamId: team.id, groupIndex: gIdx,
                         entryType: 'GROUP', chestNumber: groupChest, name: groupDisplayName,
                         displayName: groupDisplayName,
-                        displayCategory: categories.find(c => c.id === item.categoryId)?.name || 'N/A',
+                        displayCategory: (categories || []).find(c => c.id === item.categoryId)?.name || 'N/A',
                         displayTeam: team.name, categoryId: item.categoryId, sortName: groupDisplayName,
-                        sortChest: groupChest, leaderId: leader.id
+                        sortChest: groupChest, leaderId: leader?.id
                     });
                 });
             });
@@ -783,7 +783,7 @@ const ItemsManagement: React.FC = () => {
 
     const handleParticipantSort = (newKey: ParticipantSortKey) => { setParticipantSort(prev => ({ sortKey: newKey, dir: prev.sortKey === newKey && prev.dir === 'asc' ? 'desc' : 'asc' })); };
     const isAllRegistryVisibleSelected = useMemo(() => registryEntries.length > 0 && registryEntries.every(r => selectedRegistryIds.has(r.id)), [registryEntries, selectedRegistryIds]);
-    const toggleAllRegistrySelect = () => setSelectedRegistryIds(isAllRegistryVisibleSelected ? new Set() : new Set(registryEntries.map(r => r.id)));
+    const toggleAllRegistrySelect = () => setSelectedRegistryIds(isAllRegistryVisibleSelected ? new Set() : new Set((registryEntries || []).map(r => r.id)));
 
     const handleDeleteSingleItem = (item: Item) => {
         setConfirmDialog({
@@ -824,12 +824,12 @@ const ItemsManagement: React.FC = () => {
                 message: `Are you sure you want to disband group "${entry.displayName}"? All enrolled members will be unassigned from this item.`,
                 confirmText: 'Disband Group',
                 action: async () => {
-                    const members = state?.participants.filter(p => 
-                        p.teamId === entry.teamId && p.itemIds.includes(entry.itemId) && (p.itemGroups?.[entry.itemId] || 1) === entry.groupIndex
-                    ) || [];
+                    const members = (state?.participants || []).filter(p => 
+                        p.teamId === entry.teamId && (p.itemIds || []).includes(entry.itemId) && (p.itemGroups?.[entry.itemId] || 1) === entry.groupIndex
+                    );
                     if (members.length > 0) {
                         const updates = members.map(m => {
-                            const nextItemIds = m.itemIds.filter(id => id !== entry.itemId);
+                            const nextItemIds = (m.itemIds || []).filter(id => id !== entry.itemId);
                             const nextItemGroups = { ...(m.itemGroups || {}) };
                             delete nextItemGroups[entry.itemId];
                             const nextLeaders = (m.groupLeaderItemIds || []).filter(id => id !== entry.itemId);
@@ -881,8 +881,8 @@ const ItemsManagement: React.FC = () => {
             message: `Confirm deletion of ${selected.length} selected registry record(s)? Group entries will be disbanded and delegate profiles will be removed.`,
             confirmText: `Delete (${selected.length})`,
             action: async () => {
-                const participantIds = selected.filter((id: string) => !id.startsWith('group_'));
-                const groupEntryIds = selected.filter((id: string) => id.startsWith('group_'));
+                const participantIds = (selected as string[]).filter(id => !id.startsWith('group_'));
+                const groupEntryIds = (selected as string[]).filter(id => id.startsWith('group_'));
 
                 const promises: Promise<any>[] = [];
 
@@ -892,7 +892,7 @@ const ItemsManagement: React.FC = () => {
 
                 if (groupEntryIds.length > 0) {
                     const updatedParticipantsMap = new Map<string, Participant>();
-                    groupEntryIds.forEach(groupId => {
+                    groupEntryIds.forEach((groupId: string) => {
                         const parts = groupId.split('_');
                         if (parts.length >= 4) {
                             const itemId = parts[1];

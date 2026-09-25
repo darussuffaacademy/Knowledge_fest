@@ -235,9 +235,9 @@ const LotMachine: React.FC = () => {
 
     const participants = useMemo(() => {
         if (!selectedItemId || !state) return [];
-        const item = state.items.find(i => i.id === selectedItemId);
+        const item = (state.items || []).find(i => i.id === selectedItemId);
         if (!item) return [];
-        const enrolled = state.participants.filter(p => p.itemIds.includes(item.id));
+        const enrolled = (state.participants || []).filter(p => (p.itemIds || []).includes(item.id));
         if (item.type === ItemType.GROUP) {
              const groups: Record<string, Participant[]> = {};
              enrolled.forEach(p => {
@@ -247,18 +247,18 @@ const LotMachine: React.FC = () => {
                  groups[key].push(p);
              });
              return Object.values(groups).map(members => {
-                 let leader = members.find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
+                 let leader = (members || []).find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
                  return { ...leader, id: leader.id, name: leader.name, chestNumber: leader.chestNumber, teamId: leader.teamId, displayName: `${leader.name} & Party` };
-             }).sort((a,b) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
+             }).sort((a,b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, {numeric: true}));
         }
-        return enrolled.map(p => ({ ...p, id: p.id, name: p.name, chestNumber: p.chestNumber, teamId: p.teamId, displayName: p.name })).sort((a,b) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
+        return (enrolled || []).map(p => ({ ...p, id: p.id, name: p.name, chestNumber: p.chestNumber, teamId: p.teamId, displayName: p.name })).sort((a,b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, {numeric: true}));
     }, [selectedItemId, state]);
 
     const conflicts = useMemo(() => {
         const conflictSet = new Set<string>();
         const codeMap = new Map<string, string>();
         if (state && selectedItemId) {
-            state.tabulation.filter(t => t.itemId === selectedItemId && t.codeLetter).forEach(t => {
+            (state.tabulation || []).filter(t => t.itemId === selectedItemId && t.codeLetter).forEach(t => {
                 if (!lotResults.some(r => r.participantId === t.participantId)) codeMap.set(t.codeLetter, t.participantId);
             });
         }
@@ -286,7 +286,7 @@ const LotMachine: React.FC = () => {
         if (state) {
             const count = newSet.size;
             // Get all possible codes from registry sorted
-            const allRegCodes = [...state.codeLetters].sort((a,b) => a.code.localeCompare(b.code)).map(c => c.code);
+            const allRegCodes = [...(state.codeLetters || [])].sort((a,b) => (a.code || '').localeCompare(b.code || '')).map(c => c.code);
             // Select exactly the first N codes to match participant count
             const nextPool = allRegCodes.slice(0, count);
             
@@ -297,12 +297,12 @@ const LotMachine: React.FC = () => {
 
             // 2. Refresh the local lotResults to map participants to the new pool
             const sortedSelections = Array.from(newSet).map(pid => {
-                const participant = participants.find(part => part.id === pid);
+                const participant = (participants || []).find(part => part.id === pid);
                 return participant;
-            }).filter(Boolean).sort((a: any, b: any) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
+            }).filter(Boolean).sort((a: any, b: any) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, {numeric: true}));
 
             const newResults = sortedSelections.map((part: any, idx) => {
-                const existingTab = state.tabulation.find(t => t.itemId === selectedItemId && t.participantId === part.id);
+                const existingTab = (state.tabulation || []).find(t => t.itemId === selectedItemId && t.participantId === part.id);
                 return {
                     participantId: part.id,
                     name: part.displayName || part.name,
@@ -455,13 +455,13 @@ const BulkCodeAssigner: React.FC = () => {
     // Check if an item has any codes assigned
     const getItemAssignedStatus = (itemId: string) => {
         if (!state) return false;
-        return state.tabulation.some(t => t.itemId === itemId && t.codeLetter);
+        return (state.tabulation || []).some(t => t.itemId === itemId && t.codeLetter);
     };
 
     // Check if an item has duplicate codes (Conflict)
     const getItemConflictStatus = (itemId: string) => {
         if (!state) return false;
-        const tabs = state.tabulation.filter(t => t.itemId === itemId && t.codeLetter);
+        const tabs = (state.tabulation || []).filter(t => t.itemId === itemId && t.codeLetter);
         const codes = tabs.map(t => t.codeLetter);
         const uniqueCodes = new Set(codes);
         return codes.length !== uniqueCodes.size;
@@ -469,13 +469,13 @@ const BulkCodeAssigner: React.FC = () => {
 
     const filteredItems = useMemo(() => {
         if (!state) return [];
-        return state.items.filter(item => {
-            const matchesSearch = item.name.toLowerCase().includes(globalSearchTerm.toLowerCase());
-            const matchesCat = globalFilters.categoryId?.length > 0 ? globalFilters.categoryId.includes(item.categoryId) : true;
-            const matchesPerf = globalFilters.performanceType?.length > 0 ? globalFilters.performanceType.includes(item.performanceType) : true;
+        return (state.items || []).filter(item => {
+            const matchesSearch = item.name.toLowerCase().includes((globalSearchTerm || '').toLowerCase());
+            const matchesCat = (globalFilters?.categoryId || []).length > 0 ? globalFilters.categoryId.includes(item.categoryId) : true;
+            const matchesPerf = (globalFilters?.performanceType || []).length > 0 ? globalFilters.performanceType.includes(item.performanceType) : true;
             
             let matchesStatus = true;
-            if (globalFilters.assignmentStatus?.length > 0) {
+            if ((globalFilters?.assignmentStatus || []).length > 0) {
                 const isAssigned = getItemAssignedStatus(item.id);
                 const showAssigned = globalFilters.assignmentStatus.includes('ASSIGNED');
                 const showUnassigned = globalFilters.assignmentStatus.includes('UNASSIGNED');
@@ -492,7 +492,7 @@ const BulkCodeAssigner: React.FC = () => {
     const groupedItems = useMemo(() => {
         if (!state) return [];
         const result: { category: any, items: Item[] }[] = [];
-        state.categories.forEach(cat => {
+        (state.categories || []).forEach(cat => {
             const catItems = filteredItems.filter(i => i.categoryId === cat.id);
             if (catItems.length > 0) result.push({ category: cat, items: catItems });
         });
@@ -507,9 +507,9 @@ const BulkCodeAssigner: React.FC = () => {
         if (!state || (state.codeLetters?.length || 0) === 0) return;
         const updates: TabulationEntry[] = [];
         Array.from(selectedItemIds).forEach(itemId => {
-            const item = state.items.find(i => i.id === itemId);
+            const item = (state.items || []).find(i => i.id === itemId);
             if (!item) return;
-            const enrolled = state.participants.filter(p => p.itemIds.includes(itemId));
+            const enrolled = (state.participants || []).filter(p => (p.itemIds || []).includes(itemId));
             
             let targets: { id: string, categoryId: string }[] = [];
             if (item.type === ItemType.GROUP) {
@@ -521,17 +521,20 @@ const BulkCodeAssigner: React.FC = () => {
                     groups[key].push(p);
                 });
                 targets = Object.values(groups).map(members => {
-                    const leader = members.find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
+                    const leader = (members || []).find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
                     return { id: leader.id, categoryId: item.categoryId };
                 });
             } else {
                 targets = enrolled.map(p => ({ id: p.id, categoryId: item.categoryId }));
             }
 
+            const codeLetters = state.codeLetters || [];
+            if (codeLetters.length === 0) return;
+
             targets.forEach((t, idx) => {
                 const entryId = `${itemId}-${t.id}`;
-                const code = state.codeLetters[idx % state.codeLetters.length].code;
-                const existing = state.tabulation.find(tab => tab.id === entryId);
+                const code = codeLetters[idx % codeLetters.length]?.code || '?';
+                const existing = (state.tabulation || []).find(tab => tab.id === entryId);
                 updates.push(existing ? { ...existing, codeLetter: code } : {
                     id: entryId, itemId, categoryId: t.categoryId, participantId: t.id, codeLetter: code, marks: {}, finalMark: null, position: null, gradeId: null
                 });
@@ -546,7 +549,7 @@ const BulkCodeAssigner: React.FC = () => {
         if (!confirm(`Clear assigned codes for ${selectedItemIds.size} items?`)) return;
         const updates: TabulationEntry[] = [];
         Array.from(selectedItemIds).forEach(itemId => {
-            state.tabulation.filter(t => t.itemId === itemId).forEach(t => updates.push({ ...t, codeLetter: '' }));
+            (state.tabulation || []).filter(t => t.itemId === itemId).forEach(t => updates.push({ ...t, codeLetter: '' }));
         });
         await updateMultipleTabulationEntries(updates);
         setSelectedItemIds(new Set());
@@ -657,10 +660,10 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
     const { state, updateMultipleTabulationEntries } = useFirebase();
     const [draftEntries, setDraftEntries] = useState<Record<string, string>>({});
     
-    const item = state?.items.find(i => i.id === itemId);
+    const item = (state?.items || []).find(i => i.id === itemId);
     const itemEntries = useMemo(() => {
         if (!state || !item) return [];
-        const enrolled = state.participants.filter(p => p.itemIds.includes(itemId));
+        const enrolled = (state.participants || []).filter(p => (p.itemIds || []).includes(itemId));
         
         if (item.type === ItemType.GROUP) {
             const groups: Record<string, Participant[]> = {};
@@ -671,8 +674,8 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
                 groups[key].push(p);
             });
             return Object.values(groups).map(members => {
-                let leader = members.find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
-                const tab = state.tabulation.find(t => t.itemId === itemId && t.participantId === leader.id);
+                let leader = (members || []).find(p => p.groupLeaderItemIds?.includes(item.id)) || members[0];
+                const tab = (state.tabulation || []).find(t => t.itemId === itemId && t.participantId === leader.id);
                 return { 
                     id: leader.id, 
                     name: `${leader.name} & Party`, 
@@ -682,15 +685,15 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
             });
         }
 
-        return enrolled.map(p => {
-            const tab = state.tabulation.find(t => t.itemId === itemId && t.participantId === p.id);
+        return (enrolled || []).map(p => {
+            const tab = (state.tabulation || []).find(t => t.itemId === itemId && t.participantId === p.id);
             return { id: p.id, name: p.name, chestNumber: p.chestNumber, codeLetter: tab?.codeLetter || '' };
         });
     }, [state, itemId, item]);
 
     useEffect(() => {
         const initial: Record<string, string> = {};
-        itemEntries.forEach(e => initial[e.id] = e.codeLetter);
+        (itemEntries || []).forEach(e => initial[e.id] = e.codeLetter);
         setDraftEntries(initial);
     }, [itemEntries]);
 
@@ -705,7 +708,7 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
         
         const updates = Object.entries(draftEntries).map(([pid, code]) => {
             const entryId = `${itemId}-${pid}`;
-            const existing = state.tabulation.find(t => t.id === entryId);
+            const existing = (state.tabulation || []).find(t => t.id === entryId);
             return existing ? { ...existing, codeLetter: code } : {
                 id: entryId, itemId, categoryId: item.categoryId, participantId: pid, codeLetter: code, marks: {}, finalMark: null, position: null, gradeId: null
             };
@@ -799,7 +802,7 @@ const CodeRegistry: React.FC = () => {
                 <SectionTitle title="Identity Registry" icon={Hash} color="rose" />
                 <div className="flex gap-2">
                     <button onClick={() => setShowPresets(!showPresets)} className="p-2 text-zinc-400 hover:text-indigo-500 bg-zinc-50 dark:bg-white/5 rounded-xl border border-zinc-100 dark:border-white/5 transition-all"><Zap size={18}/></button>
-                    <button onClick={() => { if(confirm("Purge?")) deleteMultipleCodeLetters(allCodes.map(c => c.id)); }} className="p-2 text-zinc-400 hover:text-rose-500 bg-zinc-50 dark:bg-white/5 rounded-xl border border-zinc-100 dark:border-white/5 transition-all"><Trash2 size={18}/></button>
+                    <button onClick={() => { if(confirm("Purge?")) deleteMultipleCodeLetters((allCodes || []).map(c => c.id)); }} className="p-2 text-zinc-400 hover:text-rose-500 bg-zinc-50 dark:bg-white/5 rounded-xl border border-zinc-100 dark:border-white/5 transition-all"><Trash2 size={18}/></button>
                 </div>
             </div>
 
@@ -818,7 +821,7 @@ const CodeRegistry: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-5 xl:grid-cols-7 gap-3 overflow-y-auto flex-grow custom-scrollbar p-1">
-                    {allCodes.map((c, index) => (
+                    {(allCodes || []).map((c, index) => (
                         <div key={c.id || `code_${c.code || index}_${index}`} className="relative group aspect-square">
                             <div onClick={() => { const s = new Set(lotCodes); if(s.has(c.code)) s.delete(c.code); else s.add(c.code); updateLotPool(Array.from(s).sort()); }} className={`w-full h-full rounded-2xl flex items-center justify-center font-black text-3xl border cursor-pointer select-none transition-all duration-500 ${lotCodes.has(c.code) ? 'bg-emerald-500 text-white border-emerald-600 shadow-lg scale-[1.05]' : 'bg-white dark:bg-zinc-900/40 text-zinc-300 dark:text-zinc-600 border-zinc-100 dark:border-white/5 hover:border-zinc-300'}`}>{c.code}</div>
                             <button onClick={(e) => { e.stopPropagation(); deleteCodeLetter(c.id); }} className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white p-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-20"><X size={10} strokeWidth={4}/></button>
@@ -895,7 +898,7 @@ const GradeRuleEditor: React.FC<{ itemType: 'single' | 'group' }> = ({ itemType 
             </div>
             <GradeRangeVisualizer grades={grades} min={0} max={100} />
             <div className="mt-8 space-y-3">
-                {grades.sort((a,b) => b.lowerLimit - a.lowerLimit).map((grade) => {
+                {[...grades].sort((a,b) => b.lowerLimit - a.lowerLimit).map((grade) => {
                     const colors = getGradeColor(grade.name);
                     return (
                         <div key={grade.id} className={`group flex items-center justify-between p-4 rounded-3xl transition-all ${colors.light}`}>
@@ -939,16 +942,16 @@ const ItemOverrideSection: React.FC = () => {
 
     const filteredItems = useMemo(() => {
         if (!state) return [];
-        return state.items.filter(i => {
-            const matchSearch = i.name.toLowerCase().includes(globalSearchTerm.toLowerCase());
-            const matchCat = globalFilters.categoryId?.length > 0 ? globalFilters.categoryId.includes(i.categoryId) : true;
+        return (state.items || []).filter(i => {
+            const matchSearch = (i.name || '').toLowerCase().includes((globalSearchTerm || '').toLowerCase());
+            const matchCat = (globalFilters.categoryId?.length || 0) > 0 ? (globalFilters.categoryId || []).includes(i.categoryId) : true;
             return matchSearch && matchCat;
-        }).sort((a,b) => a.name.localeCompare(b.name));
+        }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
     }, [state, globalSearchTerm, globalFilters]);
 
     if (!state) return null;
 
-    const selectedItem = state.items.find(i => i.id === selectedItemId);
+    const selectedItem = (state.items || []).find(i => i.id === selectedItemId);
 
     return (
         <Card title="Item Point Overrides" action={<span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{filteredItems.length} Scopes</span>}>
@@ -961,9 +964,9 @@ const ItemOverrideSection: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar p-1">
-                    {filteredItems.map(item => {
+                    {(filteredItems || []).map(item => {
                         const hasOverrides = (item.gradePointsOverride && Object.keys(item.gradePointsOverride).length > 0);
-                        const isCustomPrizes = JSON.stringify(item.points) !== JSON.stringify(state.settings.defaultPoints[item.type === ItemType.SINGLE ? 'single' : 'group']);
+                        const isCustomPrizes = JSON.stringify(item.points) !== JSON.stringify(state.settings?.defaultPoints?.[item.type === ItemType.SINGLE ? 'single' : 'group'] || {});
                         
                         return (
                             <div 
@@ -974,7 +977,7 @@ const ItemOverrideSection: React.FC = () => {
                                 <div>
                                     <div className="flex justify-between items-start mb-3">
                                         <div className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${selectedItemId === item.id ? 'bg-white/20 text-white border-white/30 border' : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-400 border border-zinc-200 dark:border-zinc-700'}`}>
-                                            {state.categories.find(c => c.id === item.categoryId)?.name}
+                                            {(state.categories || []).find(c => c.id === item.categoryId)?.name}
                                         </div>
                                         {(hasOverrides || isCustomPrizes) && <Star size={12} className={selectedItemId === item.id ? 'text-white' : 'text-amber-500'} fill="currentColor"/>}
                                     </div>

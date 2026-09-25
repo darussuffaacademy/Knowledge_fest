@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { AlignJustify, Book, CheckSquare, Calendar, Download, File, FileCheck, FileDown, FileText, Grid3X3, Layers, Printer, Square, Stamp, Trophy, UserSquare2, Crown, MapPin, Phone, Mail, Globe, Info, Settings2, X, Check } from 'lucide-react';
+import { AlignJustify, Book, CheckSquare, Calendar, Download, File, FileCheck, FileDown, FileText, Grid3X3, Layers, Printer, Square, Stamp, Trophy, UserSquare2, Crown, MapPin, Phone, Mail, Globe, Info, Settings2, X, Check, Users } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import Card from '../components/Card';
@@ -30,31 +30,43 @@ const ReportsPage: React.FC = () => {
   
   // --- Memoized Filtered Data ---
 
+  const filteredTeams = useMemo(() => {
+      if (!state) return [];
+      const teamFilter = globalFilters?.teamId || [];
+      return (state.teams || []).filter(t => teamFilter.length === 0 || teamFilter.includes(t.id))
+          .sort((a, b) => a.name.localeCompare(b.name));
+  }, [state, globalFilters?.teamId]);
+
   const filteredParticipants = useMemo(() => {
       if (!state) return [];
-      const itemTypeFilter = globalFilters.itemType || [];
-      const hasGZoneSelected = globalFilters.categoryId.some(catId => {
-          const c = state.categories.find(cat => cat.id === catId);
+      const itemTypeFilter = globalFilters?.itemType || [];
+      const categoryFilter = globalFilters?.categoryId || [];
+      const teamFilter = globalFilters?.teamId || [];
+      const itemFilter = globalFilters?.itemId || [];
+      const perfFilter = globalFilters?.performanceType || [];
+
+      const hasGZoneSelected = categoryFilter.some(catId => {
+          const c = (state.categories || []).find(cat => cat.id === catId);
           return c && (c.isGeneralCategory || /g[\s_-]?zone|general/i.test(c.name));
       });
 
-      return state.participants.filter(p => {
-            const teamMatch = globalFilters.teamId.length === 0 || globalFilters.teamId.includes(p.teamId);
-            const categoryMatch = globalFilters.categoryId.length === 0 || 
+      return (state.participants || []).filter(p => {
+            const teamMatch = teamFilter.length === 0 || teamFilter.includes(p.teamId);
+            const categoryMatch = categoryFilter.length === 0 || 
                 hasGZoneSelected ||
-                globalFilters.categoryId.includes(p.categoryId) ||
-                p.itemIds.some(id => {
-                    const item = state.items.find(i => i.id === id);
-                    return item && globalFilters.categoryId.includes(item.categoryId);
+                categoryFilter.includes(p.categoryId) ||
+                (p.itemIds || []).some(id => {
+                    const item = (state.items || []).find(i => i.id === id);
+                    return item && categoryFilter.includes(item.categoryId);
                 });
             if (!teamMatch || !categoryMatch) return false;
 
-            const relevantItems = p.itemIds.map(id => state.items.find(i => i.id === id)).filter(Boolean) as Item[];
+            const relevantItems = (p.itemIds || []).map(id => (state.items || []).find(i => i.id === id)).filter(Boolean) as Item[];
 
-            if (globalFilters.itemId.length > 0 && !p.itemIds.some(id => globalFilters.itemId.includes(id))) return false;
+            if (itemFilter.length > 0 && !(p.itemIds || []).some(id => itemFilter.includes(id))) return false;
 
-            if (globalFilters.performanceType.length > 0) {
-                const hasPerfMatch = relevantItems.some(item => globalFilters.performanceType.includes(item.performanceType));
+            if (perfFilter.length > 0) {
+                const hasPerfMatch = relevantItems.some(item => perfFilter.includes(item.performanceType));
                 if (!hasPerfMatch) return false;
             }
 
@@ -64,49 +76,61 @@ const ReportsPage: React.FC = () => {
             }
 
             return true;
-        }).sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true }));
+        }).sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
   }, [state, globalFilters]);
 
   const filteredItems = useMemo(() => {
       if (!state) return [];
-      const itemTypeFilter = globalFilters.itemType || [];
-      return state.items.filter(item => 
-            (globalFilters.categoryId.length === 0 || globalFilters.categoryId.includes(item.categoryId)) &&
-            (globalFilters.performanceType.length === 0 || globalFilters.performanceType.includes(item.performanceType)) &&
+      const itemTypeFilter = globalFilters?.itemType || [];
+      const categoryFilter = globalFilters?.categoryId || [];
+      const itemFilter = globalFilters?.itemId || [];
+      const perfFilter = globalFilters?.performanceType || [];
+
+      return (state.items || []).filter(item => 
+            (categoryFilter.length === 0 || categoryFilter.includes(item.categoryId)) &&
+            (perfFilter.length === 0 || perfFilter.includes(item.performanceType)) &&
             (itemTypeFilter.length === 0 || itemTypeFilter.some(t => t.toLowerCase() === (item.type || '').toLowerCase())) &&
-            (globalFilters.itemId.length === 0 || globalFilters.itemId.includes(item.id))
+            (itemFilter.length === 0 || itemFilter.includes(item.id))
           );
   }, [state, globalFilters]);
 
   const filteredSchedule = useMemo(() => {
       if (!state) return [];
-      const itemTypeFilter = globalFilters.itemType || [];
-      return state.schedule.filter(event => {
-          const item = state.items.find(i => i.id === event.itemId);
-          const category = state.categories.find(c => c.id === event.categoryId);
+      const itemTypeFilter = globalFilters?.itemType || [];
+      const categoryFilter = globalFilters?.categoryId || [];
+      const itemFilter = globalFilters?.itemId || [];
+      const perfFilter = globalFilters?.performanceType || [];
+
+      return (state.schedule || []).filter(event => {
+          const item = (state.items || []).find(i => i.id === event.itemId);
+          const category = (state.categories || []).find(c => c.id === event.categoryId);
           if (!item) return false;
 
-          if (globalFilters.categoryId.length > 0 && !globalFilters.categoryId.includes(category?.id || '')) return false;
-          if (globalFilters.performanceType.length > 0 && !globalFilters.performanceType.includes(item?.performanceType || '')) return false;
+          if (categoryFilter.length > 0 && !categoryFilter.includes(category?.id || '')) return false;
+          if (perfFilter.length > 0 && !perfFilter.includes(item?.performanceType || '')) return false;
           if (itemTypeFilter.length > 0 && !itemTypeFilter.some(t => t.toLowerCase() === (item?.type || '').toLowerCase())) return false;
-          if (globalFilters.itemId.length > 0 && !globalFilters.itemId.includes(item.id)) return false;
+          if (itemFilter.length > 0 && !itemFilter.includes(item.id)) return false;
           return true;
       });
   }, [state, globalFilters]);
 
   const filteredResults = useMemo(() => {
       if (!state) return [];
-      const itemTypeFilter = globalFilters.itemType || [];
-      return state.results.filter(r => {
+      const itemTypeFilter = globalFilters?.itemType || [];
+      const categoryFilter = globalFilters?.categoryId || [];
+      const itemFilter = globalFilters?.itemId || [];
+      const perfFilter = globalFilters?.performanceType || [];
+
+      return (state.results || []).filter(r => {
            if (r.status !== ResultStatus.DECLARED) return false;
-           const item = state.items.find(i => i.id === r.itemId);
-           const category = state.categories.find(c => c.id === r.categoryId);
+           const item = (state.items || []).find(i => i.id === r.itemId);
+           const category = (state.categories || []).find(c => c.id === r.categoryId);
            if (!item || !category) return false;
 
-           if (globalFilters.categoryId.length > 0 && !globalFilters.categoryId.includes(category?.id || '')) return false;
-           if (globalFilters.performanceType.length > 0 && !globalFilters.performanceType.includes(item?.performanceType || '')) return false;
+           if (categoryFilter.length > 0 && !categoryFilter.includes(category?.id || '')) return false;
+           if (perfFilter.length > 0 && !perfFilter.includes(item?.performanceType || '')) return false;
            if (itemTypeFilter.length > 0 && !itemTypeFilter.some(t => t.toLowerCase() === (item?.type || '').toLowerCase())) return false;
-           if (globalFilters.itemId.length > 0 && !globalFilters.itemId.includes(item.id)) return false;
+           if (itemFilter.length > 0 && !itemFilter.includes(item.id)) return false;
            return true;
       });
   }, [state, globalFilters]);
@@ -212,11 +236,11 @@ const ReportsPage: React.FC = () => {
     let html = `${getStyles()}${profileStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Participant Profiles')}`;
     filteredParticipants.forEach((p, index) => {
       const team = getTeamName(p.teamId); const category = getCategoryName(p.categoryId);
-      const participantScheduledItems = p.itemIds.map(itemId => { 
-          const item = state.items.find(i => i.id === itemId); 
+      const participantScheduledItems = (p.itemIds || []).map(itemId => { 
+          const item = (state.items || []).find(i => i.id === itemId); 
           if (!item) return null;
           if (itemTypeFilter.length > 0 && !itemTypeFilter.some(t => t.toLowerCase() === (item.type || '').toLowerCase())) return null;
-          const schedule = state.schedule.find(s => s.itemId === itemId && s.categoryId === p.categoryId); 
+          const schedule = (state.schedule || []).find(s => s.itemId === itemId && s.categoryId === p.categoryId); 
           return { item, schedule }; 
       }).filter(Boolean);
       
@@ -313,7 +337,7 @@ const ReportsPage: React.FC = () => {
     filteredParticipants.forEach((p) => {
         const team = getTeamName(p.teamId);
         const categoryName = getCategoryName(p.categoryId);
-        const items = p.itemIds.map(id => state.items.find(i => i.id === id)).filter(Boolean) as Item[];
+        const items = (p.itemIds || []).map(id => (state.items || []).find(i => i.id === id)).filter(Boolean) as Item[];
         const relevantItems = items.filter(i => itemTypeFilter.length === 0 || itemTypeFilter.some(t => t.toLowerCase() === (i.type || '').toLowerCase()));
 
         // Grouping: Zone (PerformanceType) -> Type (ItemType)
@@ -367,10 +391,10 @@ const ReportsPage: React.FC = () => {
       const items = [...filteredItems].sort((a, b) => a.name.localeCompare(b.name));
       let html = `${getStyles()}${getWatermarkHTML()}${getBrandingHeaderHTML('Reporting Checklist')}`;
       items.forEach((item, index) => {
-          const category = state.categories.find(c => c.id === item.categoryId)?.name;
-          const participants = state.participants
-            .filter(p => p.itemIds.includes(item.id))
-            .filter(p => globalFilters.teamId.length === 0 || globalFilters.teamId.includes(p.teamId));
+          const category = (state.categories || []).find(c => c.id === item.categoryId)?.name;
+          const participants = (state.participants || [])
+            .filter(p => (p.itemIds || []).includes(item.id))
+            .filter(p => (globalFilters?.teamId || []).length === 0 || (globalFilters?.teamId || []).includes(p.teamId));
           if (participants.length === 0) return;
           let displayEntries = [];
           if (item.type === ItemType.GROUP) {
@@ -388,7 +412,7 @@ const ReportsPage: React.FC = () => {
               displayEntries = participants.map(p => ({ id: p.id, chestNumber: p.chestNumber, name: p.name, teamId: p.teamId })).sort((a,b) => a.chestNumber.localeCompare(b.chestNumber, undefined, {numeric: true}));
           }
           html += ` <div class="report-block" style="margin-bottom: 2rem; ${index > 0 && isPaginated ? 'page-break-before: always;' : ''}"> <div class="block-header" style="background: var(--table-header); padding: 10px; border: 1px solid #E0E2D9;"> <h3 style="margin:0;">${item.name} (${item.type})</h3> <p style="margin:0;">Category: ${category} | Duration: ${item.duration} min</p> </div> <table> <thead><tr><th>Sl</th><th>Code</th><th>Chest No</th><th>Name</th><th>Team</th><th>Signature</th></tr></thead> <tbody> ${displayEntries.map((p, i) => {
-              const tab = state.tabulation.find(t => t.itemId === item.id && t.participantId === p.id);
+              const tab = (state.tabulation || []).find(t => t.itemId === item.id && t.participantId === p.id);
               const code = tab?.codeLetter || '-';
               return ` <tr><td>${i+1}</td><td style="font-weight:bold;color:#6366f1">${code}</td><td style="font-weight:bold">${p.chestNumber}</td><td>${p.name}</td><td>${getTeamName(p.teamId)}</td><td></td></tr> `;
           }).join('')} </tbody> </table> </div> `;
@@ -402,10 +426,11 @@ const ReportsPage: React.FC = () => {
       if (filteredResults.length === 0) html += `<p>No results match current filters.</p>`;
       else {
           filteredResults.forEach((result, index) => {
-             const item = state.items.find(i => i.id === result.itemId);
-             const category = state.categories.find(c => c.id === result.categoryId);
-             html += ` <div class="report-block" style="margin-bottom: 2rem; ${index > 0 && isPaginated ? 'page-break-before: always;' : ''}"> <h4 class="block-header">${item?.name} (${category?.name}) - ${item?.type}</h4> <table> <thead><tr><th>Rank</th><th>Chest No</th><th>Name</th><th>Team</th><th>Mark</th><th>Grade</th></tr></thead> <tbody> ${result.winners.sort((a,b) => (a.position || 9) - (b.position || 9)).map(w => {
-                 const p = state.participants.find(part => part.id === w.participantId);
+             const item = (state.items || []).find(i => i.id === result.itemId);
+             const category = (state.categories || []).find(c => c.id === result.categoryId);
+             const winnersList = result.winners || [];
+             html += ` <div class="report-block" style="margin-bottom: 2rem; ${index > 0 && isPaginated ? 'page-break-before: always;' : ''}"> <h4 class="block-header">${item?.name} (${category?.name}) - ${item?.type}</h4> <table> <thead><tr><th>Rank</th><th>Chest No</th><th>Name</th><th>Team</th><th>Mark</th><th>Grade</th></tr></thead> <tbody> ${[...winnersList].sort((a,b) => (a.position || 9) - (b.position || 9)).map(w => {
+                 const p = (state.participants || []).find(part => part.id === w.participantId);
                  const grade = w.gradeId ? (item?.type === ItemType.SINGLE ? state.gradePoints.single : state.gradePoints.group).find(g => g.id === w.gradeId)?.name : '-';
                  return `<tr><td>${w.position || '-'}</td><td>${p?.chestNumber}</td><td>${p?.name}</td><td>${getTeamName(p?.teamId || '')}</td><td>${w.mark?.toFixed(2)}</td><td>${grade}</td></tr>`;
              }).join('')} </tbody> </table> </div> `;
@@ -469,14 +494,14 @@ const ReportsPage: React.FC = () => {
 
         let hasRelevantWinner = false;
 
-        res.winners.forEach(w => {
+        (res.winners || []).forEach(w => {
             if (!w.position || w.position > 3) return;
             
-            const participant = state.participants.find(p => p.id === w.participantId);
+            const participant = (state.participants || []).find(p => p.id === w.participantId);
             if (!participant) return;
 
             // Apply Team Filter from universal filters
-            if (globalFilters.teamId.length > 0 && !globalFilters.teamId.includes(participant.teamId)) return;
+            if ((globalFilters?.teamId || []).length > 0 && !(globalFilters?.teamId || []).includes(participant.teamId)) return;
 
             hasRelevantWinner = true;
             const winnerSummary = `${participant.chestNumber}. ${participant.name}`;
@@ -624,6 +649,248 @@ const ReportsPage: React.FC = () => {
     setReportContent({ title: 'Event Schedule', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
 
+  const generateTeamsAndParticipantsReport = (paginated: boolean) => {
+    if (!state) return;
+
+    const teamReportStyles = `
+      <style>
+        .team-report-block { margin-bottom: 2.5rem; page-break-inside: avoid; }
+        .team-banner { 
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .team-title-group { display: flex; align-items: center; gap: 14px; }
+        .team-badge-circle {
+            width: 44px;
+            height: 44px;
+            background: var(--primary);
+            color: #fff;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 900;
+            font-family: 'Roboto Slab', serif;
+            text-transform: uppercase;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .team-name-text { 
+            font-family: 'Roboto Slab', serif; 
+            font-size: 20px; 
+            font-weight: 800; 
+            color: var(--primary); 
+            text-transform: uppercase; 
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        .team-leaders-line { font-size: 11px; color: #475569; margin-top: 4px; font-weight: 600; }
+        .team-stats-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+        .stat-pill { 
+            background: #fff; 
+            border: 1px solid var(--border); 
+            padding: 5px 12px; 
+            border-radius: 20px; 
+            font-size: 11px; 
+            font-weight: 700; 
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        .role-pill {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .role-leader { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .role-assistant { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+        .item-chip-small {
+            display: inline-block;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            color: #334155;
+            margin: 1px 2px;
+        }
+        .item-chip-group { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+        .overview-table th { background: #f1f5f9 !important; }
+      </style>
+    `;
+
+    let html = `${getStyles()}${teamReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Teams & Participants Directory')}`;
+
+    if (filteredTeams.length === 0) {
+      html += `<p class="text-center" style="padding: 50px; opacity: 0.5;">No teams match the active filters.</p>`;
+      setReportContent({ title: 'Teams & Participants Roster', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
+      return;
+    }
+
+    // --- 1. Master Delegation Summary Overview Table ---
+    html += `
+      <div style="margin-bottom: 2.5rem;">
+        <h3 style="margin-bottom: 10px;">Delegation Summary Overview</h3>
+        <table class="overview-table">
+          <thead>
+            <tr>
+              <th style="width: 5%;">Sl</th>
+              <th style="width: 25%;">Team Name</th>
+              <th style="width: 20%;">Team Leader</th>
+              <th style="width: 20%;">Assistant Coordinator</th>
+              <th style="width: 15%; text-align: center;">Enrolled Delegates</th>
+              <th style="width: 15%; text-align: center;">Unique Items</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredTeams.map((team, idx) => {
+              const teamParts = (state.participants || []).filter(p => p.teamId === team.id);
+              const leader = teamParts.find(p => p.role === 'leader');
+              const assistant = teamParts.find(p => p.role === 'assistant');
+              const teamItemIds = new Set<string>();
+              teamParts.forEach(p => (p.itemIds || []).forEach(id => teamItemIds.add(id)));
+
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td style="font-weight: 800; color: var(--primary); text-transform: uppercase;">${team.name}</td>
+                  <td>${leader ? `<span style="font-weight:700;">${leader.name}</span>` : '<span style="opacity:0.4;">Not Assigned</span>'}</td>
+                  <td>${assistant ? `<span style="font-weight:700;">${assistant.name}</span>` : '<span style="opacity:0.4;">Not Assigned</span>'}</td>
+                  <td style="text-align: center; font-weight: 800; font-size: 13px; color: var(--secondary);">${teamParts.length}</td>
+                  <td style="text-align: center; font-weight: 700;">${teamItemIds.size}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // --- 2. Detailed Roster for Each Team ---
+    filteredTeams.forEach((team, teamIndex) => {
+      const teamParticipants = filteredParticipants
+        .filter(p => p.teamId === team.id)
+        .sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
+
+      const allTeamParts = (state.participants || []).filter(p => p.teamId === team.id);
+      const leader = allTeamParts.find(p => p.role === 'leader');
+      const assistant = allTeamParts.find(p => p.role === 'assistant');
+
+      const uniqueItems = new Set<string>();
+      teamParticipants.forEach(p => (p.itemIds || []).forEach(id => uniqueItems.add(id)));
+
+      // Category breakdown
+      const catCount: Record<string, number> = {};
+      teamParticipants.forEach(p => {
+        const cName = getCategoryName(p.categoryId);
+        catCount[cName] = (catCount[cName] || 0) + 1;
+      });
+      const catSpread = Object.entries(catCount)
+        .map(([c, count]) => `${c}: <strong>${count}</strong>`)
+        .join(' &nbsp;•&nbsp; ');
+
+      const wrapperClass = (paginated && teamIndex > 0) ? 'team-report-block page-break-before-always' : 'team-report-block';
+
+      html += `
+        <div class="${wrapperClass}">
+          <div class="team-banner">
+            <div class="team-title-group">
+              <div class="team-badge-circle">${team.name.charAt(0)}</div>
+              <div>
+                <h3 class="team-name-text">${team.name}</h3>
+                <div class="team-leaders-line">
+                  <strong>Official Leader:</strong> ${leader ? leader.name : '<span style="opacity:0.5;">None</span>'} 
+                  ${assistant ? ` &nbsp;|&nbsp; <strong>Assistant:</strong> ${assistant.name}` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="team-stats-pills">
+              <div class="stat-pill"><strong>${teamParticipants.length}</strong> Delegates</div>
+              <div class="stat-pill"><strong>${uniqueItems.size}</strong> Items Registered</div>
+              ${catSpread ? `<div class="stat-pill" style="opacity:0.9;">${catSpread}</div>` : ''}
+            </div>
+          </div>
+
+          ${teamParticipants.length > 0 ? `
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 5%;">Sl</th>
+                  <th style="width: 10%;">Chest No</th>
+                  <th style="width: 24%;">Participant Name</th>
+                  <th style="width: 14%;">Category</th>
+                  <th style="width: 12%;">Place</th>
+                  <th style="width: 27%;">Registered Items</th>
+                  <th style="width: 8%; text-align: center;">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${teamParticipants.map((p, pIdx) => {
+                  const categoryName = getCategoryName(p.categoryId);
+                  const enrolledItems = (p.itemIds || []).map(id => (state.items || []).find(i => i.id === id)).filter(Boolean) as Item[];
+                  
+                  let roleBadge = '';
+                  if (p.role === 'leader') {
+                    roleBadge = '<span class="role-pill role-leader">Leader</span>';
+                  } else if (p.role === 'assistant') {
+                    roleBadge = '<span class="role-pill role-assistant">Assistant</span>';
+                  }
+
+                  return `
+                    <tr>
+                      <td>${pIdx + 1}</td>
+                      <td style="font-weight: 800; color: var(--primary);">${p.chestNumber || '-'}</td>
+                      <td>
+                        <div style="font-weight: 700; display: inline-flex; align-items: center;">
+                          ${p.name} ${roleBadge}
+                        </div>
+                      </td>
+                      <td>${categoryName}</td>
+                      <td>${p.place || '-'}</td>
+                      <td>
+                        ${enrolledItems.length > 0 ? enrolledItems.map(item => `
+                          <span class="item-chip-small ${item.type === ItemType.GROUP ? 'item-chip-group' : ''}" title="${item.type} • ${item.performanceType}">
+                            ${item.name}
+                          </span>
+                        `).join('') : '<span style="opacity: 0.35; font-size: 11px;">No items</span>'}
+                      </td>
+                      <td style="text-align: center; font-weight: 800; color: var(--secondary);">${enrolledItems.length}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          ` : '<p style="padding: 15px; font-style: italic; opacity: 0.5;">No participants found for this team matching current filters.</p>'}
+        </div>
+      `;
+    });
+
+    setReportContent({ 
+      title: 'Teams & Participants Roster', 
+      content: html, 
+      isSearchable: true, 
+      hideHeader: !showPrintHeader, 
+      hideFooter: !showPrintFooter 
+    });
+  };
+
   const generateParticipantItemChecklist = () => {
     if (!state) return;
     const matrixStyles = `
@@ -652,8 +919,9 @@ const ReportsPage: React.FC = () => {
     `;
     let html = `${getStyles()}${matrixStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Registration Matrix')}<h3>Participant Registry Matrix</h3>`;
     
-    state.categories.forEach(cat => {
-        const catItems = state.items.filter(i => i.categoryId === cat.id && (globalFilters.itemType.length === 0 || globalFilters.itemType.some(t => t.toLowerCase() === (i.type || '').toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name));
+    (state.categories || []).forEach(cat => {
+        const itemTypeFilter = globalFilters?.itemType || [];
+        const catItems = (state.items || []).filter(i => i.categoryId === cat.id && (itemTypeFilter.length === 0 || itemTypeFilter.some(t => t.toLowerCase() === (i.type || '').toLowerCase()))).sort((a,b) => a.name.localeCompare(b.name));
         if (catItems.length === 0) return;
         
         const isGZone = !!cat.isGeneralCategory || /g[\s_-]?zone|general/i.test(cat.name);
@@ -663,7 +931,7 @@ const ReportsPage: React.FC = () => {
                 // Encompass all participants from both Sub-Zone and High-Zone tiers
                 return true;
             }
-            return p.categoryId === cat.id || p.itemIds.some(id => catItemIds.has(id));
+            return p.categoryId === cat.id || (p.itemIds || []).some(id => catItemIds.has(id));
         }).sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true }));
 
         if (catParticipants.length === 0) return;
@@ -687,13 +955,13 @@ const ReportsPage: React.FC = () => {
                     <tbody>
                         ${catParticipants.map(p => {
                             const isExternalCat = p.categoryId !== cat.id;
-                            const extCatName = isExternalCat ? state.categories.find(c => c.id === p.categoryId)?.name : null;
+                            const extCatName = isExternalCat ? (state.categories || []).find(c => c.id === p.categoryId)?.name : null;
                             const catBadge = extCatName ? `<span style="font-size: 8px; font-weight: 700; opacity: 0.7; margin-left: 4px; color: #6366f1;">(${extCatName})</span>` : '';
                             return `
                                 <tr>
                                     <td class="participant-name-cell">${p.chestNumber} - ${p.name}${catBadge}</td>
                                     ${catItems.map(item => `
-                                        <td>${p.itemIds.includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
+                                        <td>${(p.itemIds || []).includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
                                     `).join('')}
                                 </tr>
                             `;
@@ -808,6 +1076,13 @@ const ReportsPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+             <Card title="Teams & Participants" action={<button onClick={() => generateTeamsAndParticipantsReport(isPaginated)} className="text-indigo-600 hover:text-indigo-800" title="Generate Teams & Participants Directory"><Users size={20}/></button>}> 
+                {filteredTeams.length > 0 && <CountBadge count={filteredTeams.length} label="Teams" />} 
+                <div className="text-center p-4"> 
+                    <Users className="h-12 w-12 mx-auto text-blue-600 dark:text-blue-400 mb-2" /> 
+                    <p className="text-sm text-zinc-500">Roster of all teams with enrolled participants and item details.</p> 
+                </div> 
+             </Card>
              <Card title="Prize Holders" action={<button onClick={generatePrizeWinnersReport} className="text-indigo-600 hover:text-indigo-800"><Printer size={20}/></button>}> 
                 <div className="text-center p-4"> 
                     <Crown className="h-12 w-12 mx-auto text-yellow-600 mb-2" /> 

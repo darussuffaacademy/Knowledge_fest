@@ -37,10 +37,13 @@ const ItemTimerPage: React.FC = () => {
     
     const filteredItems = useMemo(() => {
         if (!state) return { onStage: [], offStage: [] };
-        let items = state.items.filter(item => {
-            const matchesSearch = item.name.toLowerCase().includes(globalSearchTerm.toLowerCase());
-            const matchesCat = globalFilters.categoryId.length > 0 ? globalFilters.categoryId.includes(item.categoryId) : true;
-            const matchesPerf = globalFilters.performanceType.length > 0 ? globalFilters.performanceType.includes(item.performanceType) : true;
+        const catFilter = globalFilters?.categoryId || [];
+        const perfFilter = globalFilters?.performanceType || [];
+        const q = (globalSearchTerm || '').toLowerCase();
+        let items = (state.items || []).filter(item => {
+            const matchesSearch = q ? item.name.toLowerCase().includes(q) : true;
+            const matchesCat = catFilter.length > 0 ? catFilter.includes(item.categoryId) : true;
+            const matchesPerf = perfFilter.length > 0 ? perfFilter.includes(item.performanceType) : true;
             return matchesSearch && matchesCat && matchesPerf;
         });
         items.sort((a,b) => a.name.localeCompare(b.name));
@@ -88,7 +91,7 @@ const ItemTimerPage: React.FC = () => {
                                     <span className="text-[10px] font-black text-zinc-300 uppercase">{section.items.length} Entries</span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {section.items.map(item => {
+                                    {(section.items || []).map(item => {
                                         const catHex = getCategoryHex(item.categoryId);
                                         return (
                                             <button

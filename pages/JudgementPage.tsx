@@ -1,5 +1,5 @@
 
-import { AlertTriangle, ArrowLeft, Award, Calculator, CheckCircle2, ChevronDown, ClipboardEdit, Clock, Edit3, Eye, FileText, Filter, LayoutGrid, Lock, LockOpen, Medal, Megaphone, Save, Search, ShieldAlert, Tag, Trash2, Trophy, UserCheck, Users, User, Star, RefreshCw, UploadCloud } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Award, Calculator, Check, CheckCircle2, ChevronDown, ClipboardEdit, Clock, Edit3, Eye, FileText, Filter, LayoutGrid, Lock, LockOpen, Medal, Megaphone, Save, Search, ShieldAlert, Sparkles, Star, Tag, Trash2, Trophy, UploadCloud, User, UserCheck, Users, X, RefreshCw } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Card from '../components/Card';
 import { useFirebase } from '../hooks/useFirebase';
@@ -129,30 +129,40 @@ const ResultCard: React.FC<ResultCardProps> = ({ item, result, status, categoryN
             </div>
 
             <div className="p-3 sm:p-4 pt-0 mt-1 border-t border-zinc-50 dark:border-white/5 pt-3 sm:pt-4">
-                <div className="flex gap-1.5">
+                <div className="flex items-center gap-1.5">
                     <button 
                         onClick={onEdit}
-                        className="flex-grow py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-widest text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 bg-amazio-primary text-white"
+                        className="flex-grow py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-widest text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 bg-amazio-primary text-white hover:opacity-95"
                     >
                         {isDeclared ? <Eye size={12}/> : <Edit3 size={12}/>}
                         {isDeclared ? 'View' : 'Score'}
                     </button>
-                    {isDraft && onUpdateTally && (
+                    {onUpdateTally && !isDeclared && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); onUpdateTally(item); }}
-                            className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-600 text-white rounded-lg sm:rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all"
-                            title="Push to Updated Status"
+                            className={`px-2 sm:px-2.5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-wider text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 ${
+                                isUpdated 
+                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                                    : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-600 hover:text-white'
+                            }`}
+                            title="Push Internal Update / Recalculate Points"
                         >
-                            <UploadCloud size={14} strokeWidth={3} />
+                            <UploadCloud size={13} strokeWidth={2.5} />
+                            <span className="hidden sm:inline">Update</span>
                         </button>
                     )}
-                    {(isDraft || isUpdated) && onDeclare && (
+                    {onDeclare && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); onDeclare(item); }}
-                            className={`w-8 h-8 sm:w-10 sm:h-10 text-white rounded-lg sm:rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all ${isUpdated ? 'bg-emerald-600' : 'bg-amber-500'}`}
-                            title="Declare Result"
+                            className={`px-2 sm:px-2.5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-wider text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 ${
+                                isDeclared 
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-600 hover:text-white' 
+                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-500/20'
+                            }`}
+                            title={isDeclared ? "Re-Declare Result" : "Declare Official Result"}
                         >
-                            <Megaphone size={14} strokeWidth={3} />
+                            <Calculator size={13} strokeWidth={2.5} />
+                            <span className="hidden sm:inline">{isDeclared ? 'Re-Declare' : 'Declare'}</span>
                         </button>
                     )}
                 </div>
@@ -263,12 +273,40 @@ const ScoringTable: React.FC<{
 // --- Main Page Component ---
 
 const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
-    const { state, currentUser, globalFilters, globalSearchTerm, updateTabulationEntry, deleteEventTabulation, saveResult } = useFirebase();
+    const { 
+        state, 
+        currentUser, 
+        globalFilters, 
+        globalSearchTerm, 
+        updateTabulationEntry, 
+        updateMultipleTabulationEntries, 
+        deleteEventTabulation, 
+        saveResult 
+    } = useFirebase();
+    
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<'ALL' | ResultStatus>('ALL');
+
+    const [confirmModal, setConfirmModal] = useState<{
+        type: 'DECLARE' | 'UPDATE' | 'UNLOCK';
+        item: Item;
+        scoring: ScoredParticipant[];
+    } | null>(null);
+
+    const [toast, setToast] = useState<{
+        type: 'success' | 'info' | 'warning' | 'error';
+        message: string;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!toast) return;
+        const timer = setTimeout(() => setToast(null), 4500);
+        return () => clearTimeout(timer);
+    }, [toast]);
 
     const isJudge = currentUser?.role === UserRole.JUDGE;
-    const isManager = currentUser?.role === UserRole.MANAGER;
+    const isManager = !currentUser || currentUser?.role === UserRole.MANAGER;
     const judgeId = currentUser?.judgeId;
 
     const selectedItem = useMemo(() => state?.items.find(i => i.id === selectedItemId), [state, selectedItemId]);
@@ -290,12 +328,13 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
             const matchesCat = globalFilters.categoryId.length > 0 ? globalFilters.categoryId.includes(item.categoryId) : true;
             const matchesPerf = globalFilters.performanceType.length > 0 ? globalFilters.performanceType.includes(item.performanceType) : true;
             const matchesStatus = globalFilters.status.length > 0 ? globalFilters.status.includes(currentStatus) : true;
+            const matchesTabFilter = statusFilter === 'ALL' || currentStatus === statusFilter;
             const assignment = state.judgeAssignments.find(a => a.itemId === item.id);
             const isAssigned = isJudge ? assignment?.judgeIds.includes(judgeId!) : true;
-            return matchesSearch && matchesCat && matchesPerf && matchesStatus && isAssigned;
+            return matchesSearch && matchesCat && matchesPerf && matchesStatus && matchesTabFilter && isAssigned;
         });
         return list.sort((a,b) => a.name.localeCompare(b.name));
-    }, [state, globalSearchTerm, globalFilters, isJudge, judgeId]);
+    }, [state, globalSearchTerm, globalFilters, statusFilter, isJudge, judgeId]);
 
     const getScoringForItem = useCallback((item: Item, currentTabulation: TabulationEntry[]) => {
         if (!state) return [];
@@ -335,7 +374,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
             const tab = currentTabulation.find(t => t.itemId === item.id && t.participantId === entity.id);
             const team = state.teams.find(t => t.id === entity.teamId);
             const marks = tab?.marks || {};
-            const validMarks = Object.values(marks).filter(m => m !== null) as number[];
+            const validMarks = Object.values(marks).filter(m => m !== null && m !== undefined && !isNaN(m as number)) as number[];
             const finalMark = validMarks.length > 0 ? validMarks.reduce((a,b) => a+b,0) / validMarks.length : 0;
             const grade = gradesConfig.find(g => finalMark >= g.lowerLimit && finalMark <= g.upperLimit);
             const gradePoints = grade ? (item.gradePointsOverride?.[grade.id] ?? (grade.points || 0)) : 0;
@@ -369,11 +408,8 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                     else if (rank === 3) prizePoints = item.points?.third || 0;
                 }
             }
-            /**
-             * Fixed: Added contributesToIndividualTally to satisfy ScoredParticipant interface requirements.
-             */
             return { ...score, rank, prizePoints, totalPoints: prizePoints + score.gradePoints, contributesToIndividualTally: !score.isGroup };
-        }).sort((a,b) => a.codeLetter.localeCompare(b.codeLetter));
+        }).sort((a,b) => (a.codeLetter || '').localeCompare(b.codeLetter || ''));
     }, [state]);
 
     const scoredParticipants = useMemo(() => {
@@ -399,85 +435,236 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
 
         // Auto-update declared/updated results if manager edits
         if ((isDeclared || isUpdated) && isManager && state) {
-            const simulatedTabs = state.tabulation.map(t => t.id === entryId ? nextTab : t);
+            const simulatedTabs = (state.tabulation || []).map(t => t.id === entryId ? nextTab : t);
             const foundInSim = simulatedTabs.find(t => t.id === entryId);
             if (foundInSim) foundInSim.marks = marks;
 
             const scoring = getScoringForItem(selectedItem, simulatedTabs);
             const winners = scoring.map(sp => ({
-                participantId: sp.participantId, position: sp.rank, mark: sp.finalMark, gradeId: sp.grade?.id || null
+                participantId: sp.participantId, position: sp.rank > 0 ? sp.rank : null, mark: sp.finalMark, gradeId: sp.grade?.id || null
             }));
             await saveResult({ itemId: selectedItem.id, categoryId: selectedItem.categoryId, status: selectedItemResult?.status || ResultStatus.DECLARED, winners });
         }
     };
 
-    const handleSaveDraft = async (itemOverride?: Item) => {
-        const item = itemOverride || selectedItem;
-        if (!item || !state) return;
-        if (isJudge && !confirm("Results will be submitted for review. Proceed?")) return;
-        const scoring = itemOverride ? getScoringForItem(itemOverride, state.tabulation) : scoredParticipants;
+    const podiumWinners = useMemo(() => {
+        if (!confirmModal) return [];
+        return [...confirmModal.scoring]
+            .filter(s => s.rank > 0)
+            .sort((a, b) => a.rank - b.rank);
+    }, [confirmModal]);
+
+    const openDeclareModal = (targetItem: Item) => {
+        if (!state) return;
+        const scoring = getScoringForItem(targetItem, state.tabulation || []);
+        if (scoring.length === 0) {
+            setToast({ type: 'warning', message: `Cannot declare "${targetItem.name}": No enrolled participants registered.` });
+            return;
+        }
+        setConfirmModal({
+            type: 'DECLARE',
+            item: targetItem,
+            scoring
+        });
+    };
+
+    const openUpdateModal = (targetItem: Item) => {
+        if (!state) return;
+        const scoring = getScoringForItem(targetItem, state.tabulation || []);
+        if (scoring.length === 0) {
+            setToast({ type: 'warning', message: `Cannot update "${targetItem.name}": No enrolled participants registered.` });
+            return;
+        }
+        setConfirmModal({
+            type: 'UPDATE',
+            item: targetItem,
+            scoring
+        });
+    };
+
+    const openUnlockModal = (targetItem: Item) => {
+        if (!state) return;
+        const scoring = getScoringForItem(targetItem, state.tabulation || []);
+        setConfirmModal({
+            type: 'UNLOCK',
+            item: targetItem,
+            scoring
+        });
+    };
+
+    const executeDeclare = async (item: Item, scoringList?: ScoredParticipant[]) => {
+        if (!state) return;
+        const scoring = scoringList || getScoringForItem(item, state.tabulation || []);
+        if (scoring.length === 0) {
+            setToast({ type: 'warning', message: `No participants enrolled in "${item.name}".` });
+            return;
+        }
         setIsSaving(true);
         try {
             const winners = scoring.map(sp => ({
-                participantId: sp.participantId, position: sp.rank, mark: sp.finalMark, gradeId: sp.grade?.id || null
+                participantId: sp.participantId,
+                position: sp.rank > 0 ? sp.rank : null,
+                mark: sp.finalMark,
+                gradeId: sp.grade?.id || null
             }));
-            await saveResult({ itemId: item.id, categoryId: item.categoryId, status: ResultStatus.UPLOADED, winners });
-        } catch (e) { alert("Failed to save draft."); }
-        finally { setIsSaving(false); }
-    };
 
-    const handlePushUpdate = async (itemOverride?: Item) => {
-        const item = itemOverride || selectedItem;
-        if (!item || !state) return;
-        if (!confirm(`Push Update for ${item.name}? This will make scores visible internally.`)) return;
-        const scoring = itemOverride ? getScoringForItem(itemOverride, state.tabulation) : scoredParticipants;
-        setIsSaving(true);
-        try {
-            const winners = scoring.map(sp => ({
-                participantId: sp.participantId, position: sp.rank, mark: sp.finalMark, gradeId: sp.grade?.id || null
-            }));
-            await saveResult({ itemId: item.id, categoryId: item.categoryId, status: ResultStatus.UPDATED, winners });
-        } catch (e) { alert("Failed to push update."); }
-        finally { setIsSaving(false); }
-    };
-
-    const handleDeclare = async (itemOverride?: Item) => {
-        const item = itemOverride || selectedItem;
-        if (!item || !state) return;
-        if (!confirm(`FINAL DECLARATION for ${item.name}? This will publish results to all screens.`)) return;
-        const scoring = itemOverride ? getScoringForItem(itemOverride, state.tabulation) : scoredParticipants;
-        setIsSaving(true);
-        try {
-            const winners = scoring.map(sp => ({
-                participantId: sp.participantId, position: sp.rank, mark: sp.finalMark, gradeId: sp.grade?.id || null
-            }));
-            await saveResult({ itemId: item.id, categoryId: item.categoryId, status: ResultStatus.DECLARED, winners });
-        } catch (e) { alert("Failed to declare."); }
-        finally { setIsSaving(false); }
-    };
-
-    const handleUnlock = async (itemOverride?: Item) => {
-        const item = itemOverride || selectedItem;
-        if (!item || !state) return;
-        if (!confirm(`Unlock ${item.name}?`)) return;
-        setIsSaving(true);
-        try {
-            const existingResult = state.results.find(r => r.itemId === item.id);
-            await saveResult({ 
-                itemId: item.id, 
-                categoryId: item.categoryId, 
-                status: ResultStatus.UPLOADED, 
-                winners: existingResult?.winners || [] 
+            await saveResult({
+                itemId: item.id,
+                categoryId: item.categoryId,
+                status: ResultStatus.DECLARED,
+                winners
             });
-        } catch (e) { alert("Failed to unlock."); }
-        finally { setIsSaving(false); }
+
+            // Sync tabulation entries with computed final mark, rank, and grade
+            if (updateMultipleTabulationEntries) {
+                const updatedTabs: TabulationEntry[] = [];
+                scoring.forEach(sp => {
+                    const entryId = `${item.id}-${sp.participantId}`;
+                    const existing = (state.tabulation || []).find(t => t.id === entryId);
+                    updatedTabs.push({
+                        id: entryId,
+                        itemId: item.id,
+                        categoryId: item.categoryId,
+                        participantId: sp.participantId,
+                        marks: existing?.marks || sp.marks || {},
+                        codeLetter: existing?.codeLetter || sp.codeLetter || '',
+                        finalMark: sp.finalMark > 0 ? sp.finalMark : null,
+                        position: sp.rank > 0 ? sp.rank : null,
+                        gradeId: sp.grade?.id || null,
+                        customChestNumber: existing?.customChestNumber
+                    });
+                });
+                await updateMultipleTabulationEntries(updatedTabs);
+            }
+
+            setToast({
+                type: 'success',
+                message: `🎉 Official verdict for "${item.name}" has been DECLARED! Live displays and leaderboard points are now active.`
+            });
+            setConfirmModal(null);
+        } catch (err: any) {
+            console.error('Declare error:', err);
+            setToast({ type: 'error', message: `Failed to declare results: ${err?.message || 'Error occurred'}` });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const executePushUpdate = async (item: Item, scoringList?: ScoredParticipant[]) => {
+        if (!state) return;
+        const scoring = scoringList || getScoringForItem(item, state.tabulation || []);
+        if (scoring.length === 0) {
+            setToast({ type: 'warning', message: `No participants enrolled in "${item.name}".` });
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const winners = scoring.map(sp => ({
+                participantId: sp.participantId,
+                position: sp.rank > 0 ? sp.rank : null,
+                mark: sp.finalMark,
+                gradeId: sp.grade?.id || null
+            }));
+
+            await saveResult({
+                itemId: item.id,
+                categoryId: item.categoryId,
+                status: ResultStatus.UPDATED,
+                winners
+            });
+
+            if (updateMultipleTabulationEntries) {
+                const updatedTabs: TabulationEntry[] = [];
+                scoring.forEach(sp => {
+                    const entryId = `${item.id}-${sp.participantId}`;
+                    const existing = (state.tabulation || []).find(t => t.id === entryId);
+                    updatedTabs.push({
+                        id: entryId,
+                        itemId: item.id,
+                        categoryId: item.categoryId,
+                        participantId: sp.participantId,
+                        marks: existing?.marks || sp.marks || {},
+                        codeLetter: existing?.codeLetter || sp.codeLetter || '',
+                        finalMark: sp.finalMark > 0 ? sp.finalMark : null,
+                        position: sp.rank > 0 ? sp.rank : null,
+                        gradeId: sp.grade?.id || null,
+                        customChestNumber: existing?.customChestNumber
+                    });
+                });
+                await updateMultipleTabulationEntries(updatedTabs);
+            }
+
+            setToast({
+                type: 'info',
+                message: `✓ Internal score update pushed for "${item.name}". Team points calculated internally.`
+            });
+            setConfirmModal(null);
+        } catch (err: any) {
+            console.error('Update error:', err);
+            setToast({ type: 'error', message: `Failed to push update: ${err?.message || 'Error occurred'}` });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const executeUnlock = async (item: Item) => {
+        if (!state) return;
+        setIsSaving(true);
+        try {
+            const existingResult = (state.results || []).find(r => r.itemId === item.id);
+            await saveResult({
+                itemId: item.id,
+                categoryId: item.categoryId,
+                status: ResultStatus.UPLOADED,
+                winners: existingResult?.winners || []
+            });
+            setToast({
+                type: 'info',
+                message: `🔓 Event "${item.name}" unlocked. Reverted to Draft status for re-evaluation.`
+            });
+            setConfirmModal(null);
+        } catch (err: any) {
+            console.error('Unlock error:', err);
+            setToast({ type: 'error', message: `Failed to unlock event: ${err?.message || 'Error occurred'}` });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const executeSaveDraft = async (item: Item) => {
+        if (!state) return;
+        const scoring = getScoringForItem(item, state.tabulation || []);
+        setIsSaving(true);
+        try {
+            const winners = scoring.map(sp => ({
+                participantId: sp.participantId,
+                position: sp.rank > 0 ? sp.rank : null,
+                mark: sp.finalMark,
+                gradeId: sp.grade?.id || null
+            }));
+            await saveResult({
+                itemId: item.id,
+                categoryId: item.categoryId,
+                status: ResultStatus.UPLOADED,
+                winners
+            });
+            setToast({
+                type: 'success',
+                message: isJudge ? `Scores for "${item.name}" submitted successfully for verification.` : `Draft scores saved for "${item.name}".`
+            });
+        } catch (err: any) {
+            console.error('Draft error:', err);
+            setToast({ type: 'error', message: `Failed to save draft: ${err?.message || 'Error occurred'}` });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     if (!state) return <div className="p-8 text-center text-zinc-500">Loading scoring modules...</div>;
 
     if (selectedItemId && selectedItem) {
-        const category = state.categories.find(c => c.id === selectedItem.categoryId);
-        const validJudgeIds = new Set(state.judges.map(j => j.id));
+        const category = (state.categories || []).find(c => c.id === selectedItem.categoryId);
+        const validJudgeIds = new Set((state.judges || []).map(j => j.id));
         const assignedJudges = (state.judgeAssignments.find(a => a.itemId === selectedItem.id)?.judgeIds || [])
             .filter(id => validJudgeIds.has(id));
         const activeJudgeInputs = isJudge ? [judgeId!] : [...assignedJudges, MANUAL_OVERRIDE_ID];
@@ -487,7 +674,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800">
                     <div>
                         <button onClick={() => setSelectedItemId(null)} className="flex items-center gap-2 text-zinc-400 hover:text-indigo-600 font-bold text-[10px] sm:text-xs uppercase tracking-widest mb-2 sm:mb-4">
-                            <ArrowLeft size={14} /> Back
+                            <ArrowLeft size={14} /> Back to Events Queue
                         </button>
                         <h2 className="text-xl sm:text-3xl font-black font-serif text-amazio-primary dark:text-white uppercase tracking-tighter">{selectedItem.name}</h2>
                         <div className="flex items-center gap-2 mt-1">
@@ -496,24 +683,81 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                         </div>
                     </div>
                     
-                    <div className="flex gap-2 w-full sm:w-auto">
-                         {isDeclared ? (
-                            !isJudge && <button onClick={() => handleUnlock()} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-amazio-primary dark:text-white rounded-lg text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-zinc-50 transition-all"><LockOpen size={14}/> Unlock</button>
-                         ) : (
-                            <>
-                                {(isManager || isJudge) && (
-                                    <button onClick={() => handleSaveDraft()} disabled={scoredParticipants.length === 0 || isSaving} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm transition-all disabled:opacity-50 ${isJudge ? 'bg-indigo-600 text-white shadow-indigo-500/20' : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-amazio-primary dark:text-white hover:bg-zinc-50'}`}>
-                                        <Save size={14}/> {isSaving ? '...' : (isJudge ? 'Submit' : 'Draft')}
-                                    </button>
-                                )}
-                                {isManager && isDraft && (
-                                    <button onClick={() => handlePushUpdate()} disabled={scoredParticipants.length === 0 || isSaving} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"><UploadCloud size={14} strokeWidth={3}/> {isSaving ? '...' : 'Update'}</button>
-                                )}
-                                {isManager && (isDraft || isUpdated) && (
-                                    <button onClick={() => handleDeclare()} disabled={scoredParticipants.length === 0 || isSaving} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"><Calculator size={14} strokeWidth={3}/> {isSaving ? '...' : 'Declare'}</button>
-                                )}
-                            </>
-                         )}
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        {isDeclared && (
+                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm">
+                                <CheckCircle2 size={13} strokeWidth={2.5} className="text-emerald-500" />
+                                <span>Verdict Declared (Live)</span>
+                            </div>
+                        )}
+                        {isUpdated && !isDeclared && (
+                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm">
+                                <RefreshCw size={13} strokeWidth={2.5} className="text-indigo-500" />
+                                <span>Scores Updated (Internal)</span>
+                            </div>
+                        )}
+
+                        {/* Save Draft / Submit */}
+                        {(isManager || isJudge) && !isDeclared && (
+                            <button 
+                                onClick={() => executeSaveDraft(selectedItem)} 
+                                disabled={scoredParticipants.length === 0 || isSaving} 
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm transition-all active:scale-95 disabled:opacity-50 ${
+                                    isJudge 
+                                        ? 'bg-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-700' 
+                                        : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-amazio-primary dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                                }`}
+                                title={isJudge ? "Submit marks for manager verification" : "Save draft scoring"}
+                            >
+                                <Save size={14}/> {isSaving ? 'Saving...' : (isJudge ? 'Submit' : 'Save Draft')}
+                            </button>
+                        )}
+
+                        {/* Update Button (Managers) */}
+                        {isManager && (
+                            <button 
+                                onClick={() => openUpdateModal(selectedItem)} 
+                                disabled={scoredParticipants.length === 0 || isSaving} 
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 ${
+                                    isUpdated
+                                        ? 'bg-indigo-700 text-white shadow-indigo-600/30'
+                                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25'
+                                }`}
+                                title="Push internal score update and calculate points without making public"
+                            >
+                                <UploadCloud size={14} strokeWidth={2.5}/> 
+                                {isSaving ? 'Updating...' : isUpdated ? 'Re-Sync Update' : 'Update'}
+                            </button>
+                        )}
+
+                        {/* Declare Button (Managers) */}
+                        {isManager && (
+                            <button 
+                                onClick={() => openDeclareModal(selectedItem)} 
+                                disabled={scoredParticipants.length === 0 || isSaving} 
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 ${
+                                    isDeclared
+                                        ? 'bg-emerald-700 text-white shadow-emerald-600/30'
+                                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25'
+                                }`}
+                                title="Publish official verdict to live projector displays, dashboard, and points"
+                            >
+                                <Calculator size={14} strokeWidth={2.5}/> 
+                                {isSaving ? 'Declaring...' : isDeclared ? 'Re-Declare' : 'Declare'}
+                            </button>
+                        )}
+
+                        {/* Unlock Button */}
+                        {isManager && (isDeclared || isUpdated) && (
+                            <button 
+                                onClick={() => openUnlockModal(selectedItem)} 
+                                disabled={isSaving} 
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all"
+                                title="Unlock to revert to draft and allow editing"
+                            >
+                                <LockOpen size={14}/> Unlock
+                            </button>
+                        )}
                     </div>
                 </div>
                 
@@ -577,12 +821,148 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                         ))}
                     </div>
                 )}
+
+                {/* Confirmation Modal */}
+                {confirmModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-3 rounded-2xl ${
+                                        confirmModal.type === 'DECLARE' 
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-200 dark:border-emerald-800' 
+                                            : confirmModal.type === 'UPDATE'
+                                            ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 border border-indigo-200 dark:border-indigo-800'
+                                            : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 border border-amber-200 dark:border-amber-800'
+                                    }`}>
+                                        {confirmModal.type === 'DECLARE' ? <Trophy size={24} strokeWidth={2.5} /> : confirmModal.type === 'UPDATE' ? <UploadCloud size={24} strokeWidth={2.5} /> : <LockOpen size={24} strokeWidth={2.5} />}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg sm:text-xl font-black font-serif text-amazio-primary dark:text-white uppercase tracking-tight">
+                                            {confirmModal.type === 'DECLARE' ? 'Declare Official Verdict' : confirmModal.type === 'UPDATE' ? 'Push Internal Update' : 'Unlock Scoring Event'}
+                                        </h3>
+                                        <p className="text-xs text-zinc-500 font-medium">
+                                            {confirmModal.item.name}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setConfirmModal(null)} className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {confirmModal.type === 'DECLARE' && (
+                                    <>
+                                        <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 leading-relaxed font-medium">
+                                            This will publish the official verdict to <strong>Live Projector Displays</strong>, the <strong>Dashboard</strong>, and award points to global team tallies.
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Podium Standings Preview</div>
+                                            {podiumWinners.length > 0 ? (
+                                                <div className="space-y-1.5">
+                                                    {podiumWinners.slice(0, 3).map(winner => (
+                                                        <div key={winner.participantId} className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs ${
+                                                                    winner.rank === 1 ? 'bg-amber-400 text-amber-950' : winner.rank === 2 ? 'bg-slate-200 text-slate-700' : 'bg-orange-200 text-orange-800'
+                                                                }`}>
+                                                                    {winner.rank}
+                                                                </span>
+                                                                <div>
+                                                                    <div className="text-xs font-black uppercase text-amazio-primary dark:text-white truncate max-w-[200px]">{winner.participantName}</div>
+                                                                    <div className="text-[9px] text-zinc-400 uppercase font-bold">{winner.teamName}</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-xs font-mono font-black text-indigo-600 dark:text-indigo-400">{winner.finalMark.toFixed(1)}%</div>
+                                                                <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">+{winner.totalPoints} pts</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 text-center text-xs text-zinc-400 bg-zinc-50 dark:bg-black/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                                                    Participants have not been scored yet. Declaring will record current entries.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+
+                                {confirmModal.type === 'UPDATE' && (
+                                    <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900 rounded-xl text-xs text-indigo-800 dark:text-indigo-200 leading-relaxed font-medium">
+                                        Internal scores and rankings will be computed and updated in the background tally ledger. Scores will remain <strong>withheld from public screens</strong> until declared.
+                                    </div>
+                                )}
+
+                                {confirmModal.type === 'UNLOCK' && (
+                                    <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900 rounded-xl text-xs text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
+                                        Unlocking this event will revert its status back to <strong>Draft</strong>, allowing judges and operators to edit marks freely.
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2.5 pt-2">
+                                <button
+                                    onClick={() => setConfirmModal(null)}
+                                    disabled={isSaving}
+                                    className="flex-1 py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (confirmModal.type === 'DECLARE') executeDeclare(confirmModal.item, confirmModal.scoring);
+                                        else if (confirmModal.type === 'UPDATE') executePushUpdate(confirmModal.item, confirmModal.scoring);
+                                        else executeUnlock(confirmModal.item);
+                                    }}
+                                    disabled={isSaving}
+                                    className={`flex-1 py-3 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                        confirmModal.type === 'DECLARE' 
+                                            ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/25' 
+                                            : confirmModal.type === 'UPDATE'
+                                            ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25'
+                                            : 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/25'
+                                    }`}
+                                >
+                                    {isSaving ? 'Processing...' : confirmModal.type === 'DECLARE' ? 'Confirm & Declare' : confirmModal.type === 'UPDATE' ? 'Confirm & Update' : 'Confirm & Unlock'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Floating Toast Notification */}
+                {toast && (
+                    <div className={`fixed bottom-6 right-6 z-50 max-w-sm w-full p-4 rounded-2xl shadow-2xl border flex items-start gap-3 animate-in slide-in-from-bottom-5 duration-300 ${
+                        toast.type === 'success' 
+                            ? 'bg-emerald-950/95 text-emerald-100 border-emerald-700 backdrop-blur-md' 
+                            : toast.type === 'error'
+                            ? 'bg-rose-950/95 text-rose-100 border-rose-700 backdrop-blur-md'
+                            : toast.type === 'warning'
+                            ? 'bg-amber-950/95 text-amber-100 border-amber-700 backdrop-blur-md'
+                            : 'bg-indigo-950/95 text-indigo-100 border-indigo-700 backdrop-blur-md'
+                    }`}>
+                        <div className="shrink-0 mt-0.5">
+                            {toast.type === 'success' && <CheckCircle2 size={18} className="text-emerald-400" />}
+                            {toast.type === 'error' && <AlertTriangle size={18} className="text-rose-400" />}
+                            {toast.type === 'warning' && <AlertTriangle size={18} className="text-amber-400" />}
+                            {toast.type === 'info' && <RefreshCw size={18} className="text-indigo-400" />}
+                        </div>
+                        <p className="flex-1 text-xs font-semibold leading-relaxed">{toast.message}</p>
+                        <button onClick={() => setToast(null)} className="shrink-0 text-white/60 hover:text-white p-0.5">
+                            <X size={14} />
+                        </button>
+                    </div>
+                )}
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-700 pb-24">
+        <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-700 pb-24">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
                 <div>
                     <h2 className="text-3xl sm:text-5xl font-black font-serif text-amazio-primary dark:text-white tracking-tighter uppercase leading-none">Scoring Terminal</h2>
@@ -596,22 +976,192 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Status Filter Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-zinc-100 dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 w-fit">
+                {[
+                    { id: 'ALL', label: 'All Events', count: (state.items || []).length },
+                    { id: ResultStatus.NOT_UPLOADED, label: 'Pending', count: (state.items || []).filter(i => !(state.results || []).some(r => r.itemId === i.id) || (state.results || []).find(r => r.itemId === i.id)?.status === ResultStatus.NOT_UPLOADED).length },
+                    { id: ResultStatus.UPLOADED, label: 'Drafted', count: (state.results || []).filter(r => r.status === ResultStatus.UPLOADED).length },
+                    { id: ResultStatus.UPDATED, label: 'Updated', count: (state.results || []).filter(r => r.status === ResultStatus.UPDATED).length },
+                    { id: ResultStatus.DECLARED, label: 'Declared', count: (state.results || []).filter(r => r.status === ResultStatus.DECLARED).length }
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setStatusFilter(tab.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                            statusFilter === tab.id
+                                ? 'bg-white dark:bg-zinc-800 text-amazio-primary dark:text-white shadow-sm'
+                                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+                        }`}
+                    >
+                        <span>{tab.label}</span>
+                        <span className={`px-1.5 py-0.2 rounded-md text-[9px] font-bold ${
+                            statusFilter === tab.id ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400' : 'bg-zinc-200/60 dark:bg-zinc-800 text-zinc-400'
+                        }`}>
+                            {tab.count}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {filteredItems.map(item => (
                     <ResultCard 
-                        key={item.id} item={item} result={state.results.find(r => r.itemId === item.id)}
+                        key={item.id} 
+                        item={item} 
+                        result={state.results.find(r => r.itemId === item.id)}
                         status={state.results.find(r => r.itemId === item.id)?.status || ResultStatus.NOT_UPLOADED}
                         categoryName={state.categories.find(c => c.id === item.categoryId)?.name || 'N/A'}
                         onEdit={() => setSelectedItemId(item.id)}
-                        onDeclare={!isJudge ? (item) => handleDeclare(item) : undefined}
-                        onUpdateTally={!isJudge ? (item) => handlePushUpdate(item) : undefined}
-                        onUnlock={!isJudge ? (item) => handleUnlock(item) : undefined}
+                        onDeclare={isManager ? () => openDeclareModal(item) : undefined}
+                        onUpdateTally={isManager ? () => openUpdateModal(item) : undefined}
+                        onUnlock={isManager ? () => openUnlockModal(item) : undefined}
                     />
                 ))}
                 {filteredItems.length === 0 && (
-                    <div className="col-span-full py-16 sm:py-24 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[1.5rem] sm:rounded-[2rem] opacity-30"><Award size={48} sm:size={64} strokeWidth={1} className="mx-auto mb-4" /><p className="font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">No matching events in queue</p></div>
+                    <div className="col-span-full py-16 sm:py-24 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[1.5rem] sm:rounded-[2rem] opacity-30">
+                        <Award size={48} sm:size={64} strokeWidth={1} className="mx-auto mb-4" />
+                        <p className="font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs">No matching events in queue</p>
+                    </div>
                 )}
             </div>
+
+            {/* Confirmation Modal in Queue View */}
+            {confirmModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className={`p-3 rounded-2xl ${
+                                    confirmModal.type === 'DECLARE' 
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-200 dark:border-emerald-800' 
+                                        : confirmModal.type === 'UPDATE'
+                                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 border border-indigo-200 dark:border-indigo-800'
+                                        : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 border border-amber-200 dark:border-amber-800'
+                                }`}>
+                                    {confirmModal.type === 'DECLARE' ? <Trophy size={24} strokeWidth={2.5} /> : confirmModal.type === 'UPDATE' ? <UploadCloud size={24} strokeWidth={2.5} /> : <LockOpen size={24} strokeWidth={2.5} />}
+                                </div>
+                                <div>
+                                    <h3 className="text-lg sm:text-xl font-black font-serif text-amazio-primary dark:text-white uppercase tracking-tight">
+                                        {confirmModal.type === 'DECLARE' ? 'Declare Official Verdict' : confirmModal.type === 'UPDATE' ? 'Push Internal Update' : 'Unlock Scoring Event'}
+                                    </h3>
+                                    <p className="text-xs text-zinc-500 font-medium">
+                                        {confirmModal.item.name}
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={() => setConfirmModal(null)} className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {confirmModal.type === 'DECLARE' && (
+                                <>
+                                    <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900 rounded-xl text-xs text-emerald-800 dark:text-emerald-200 leading-relaxed font-medium">
+                                        This will publish the official verdict to <strong>Live Projector Displays</strong>, the <strong>Dashboard</strong>, and award points to global team tallies.
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Podium Standings Preview</div>
+                                        {podiumWinners.length > 0 ? (
+                                            <div className="space-y-1.5">
+                                                {podiumWinners.slice(0, 3).map(winner => (
+                                                    <div key={winner.participantId} className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs ${
+                                                                winner.rank === 1 ? 'bg-amber-400 text-amber-950' : winner.rank === 2 ? 'bg-slate-200 text-slate-700' : 'bg-orange-200 text-orange-800'
+                                                            }`}>
+                                                                {winner.rank}
+                                                            </span>
+                                                            <div>
+                                                                <div className="text-xs font-black uppercase text-amazio-primary dark:text-white truncate max-w-[200px]">{winner.participantName}</div>
+                                                                <div className="text-[9px] text-zinc-400 uppercase font-bold">{winner.teamName}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-xs font-mono font-black text-indigo-600 dark:text-indigo-400">{winner.finalMark.toFixed(1)}%</div>
+                                                            <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">+{winner.totalPoints} pts</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 text-center text-xs text-zinc-400 bg-zinc-50 dark:bg-black/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                                                Participants have not been scored yet. Declaring will record current entries.
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {confirmModal.type === 'UPDATE' && (
+                                <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900 rounded-xl text-xs text-indigo-800 dark:text-indigo-200 leading-relaxed font-medium">
+                                    Internal scores and rankings will be computed and updated in the background tally ledger. Scores will remain <strong>withheld from public screens</strong> until declared.
+                                </div>
+                            )}
+
+                            {confirmModal.type === 'UNLOCK' && (
+                                <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900 rounded-xl text-xs text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
+                                    Unlocking this event will revert its status back to <strong>Draft</strong>, allowing judges and operators to edit marks freely.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2.5 pt-2">
+                            <button
+                                onClick={() => setConfirmModal(null)}
+                                disabled={isSaving}
+                                className="flex-1 py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirmModal.type === 'DECLARE') executeDeclare(confirmModal.item, confirmModal.scoring);
+                                    else if (confirmModal.type === 'UPDATE') executePushUpdate(confirmModal.item, confirmModal.scoring);
+                                    else executeUnlock(confirmModal.item);
+                                }}
+                                disabled={isSaving}
+                                className={`flex-1 py-3 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                    confirmModal.type === 'DECLARE' 
+                                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/25' 
+                                        : confirmModal.type === 'UPDATE'
+                                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25'
+                                        : 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/25'
+                                }`}
+                            >
+                                {isSaving ? 'Processing...' : confirmModal.type === 'DECLARE' ? 'Confirm & Declare' : confirmModal.type === 'UPDATE' ? 'Confirm & Update' : 'Confirm & Unlock'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Toast Notification in Queue View */}
+            {toast && (
+                <div className={`fixed bottom-6 right-6 z-50 max-w-sm w-full p-4 rounded-2xl shadow-2xl border flex items-start gap-3 animate-in slide-in-from-bottom-5 duration-300 ${
+                    toast.type === 'success' 
+                        ? 'bg-emerald-950/95 text-emerald-100 border-emerald-700 backdrop-blur-md' 
+                        : toast.type === 'error'
+                        ? 'bg-rose-950/95 text-rose-100 border-rose-700 backdrop-blur-md'
+                        : toast.type === 'warning'
+                        ? 'bg-amber-950/95 text-amber-100 border-amber-700 backdrop-blur-md'
+                        : 'bg-indigo-950/95 text-indigo-100 border-indigo-700 backdrop-blur-md'
+                }`}>
+                    <div className="shrink-0 mt-0.5">
+                        {toast.type === 'success' && <CheckCircle2 size={18} className="text-emerald-400" />}
+                        {toast.type === 'error' && <AlertTriangle size={18} className="text-rose-400" />}
+                        {toast.type === 'warning' && <AlertTriangle size={18} className="text-amber-400" />}
+                        {toast.type === 'info' && <RefreshCw size={18} className="text-indigo-400" />}
+                    </div>
+                    <p className="flex-1 text-xs font-semibold leading-relaxed">{toast.message}</p>
+                    <button onClick={() => setToast(null)} className="shrink-0 text-white/60 hover:text-white p-0.5">
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
