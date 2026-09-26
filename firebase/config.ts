@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, Firestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -15,13 +15,14 @@ const firebaseConfig = {
 // Initialize Firebase idempotently
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with Persistence safely
-// If already initialized with options or during HMR/reloads, reuse existing instance
+// Initialize Firestore with single-tab persistence and force ownership safely.
+// Avoiding persistentMultipleTabManager prevents the cross-tab lease clock skew error:
+// "Detected an update time that is in the future"
 let db: Firestore;
 try {
   db = initializeFirestore(app, {
     localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
+      tabManager: persistentSingleTabManager({ forceOwnership: true })
     })
   });
 } catch (e) {
