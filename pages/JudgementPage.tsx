@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, Award, Calculator, Check, CheckCircle2, Chevr
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Card from '../components/Card';
 import { useFirebase } from '../hooks/useFirebase';
-import { Grade, Item, ItemType, Participant, PerformanceType, Result, ResultStatus, TabulationEntry, UserRole, Judge } from '../types';
+import { Grade, Item, ItemType, Participant, PerformanceType, Result, ResultStatus, TabulationEntry, UserRole, Judge, ScheduledEvent } from '../types';
 
 interface ScoredParticipant {
     participantId: string;
@@ -45,13 +45,26 @@ interface ResultCardProps {
     result: Result | undefined;
     status: ResultStatus;
     categoryName: string;
+    participantCount?: number;
+    scheduledInfo?: ScheduledEvent;
     onEdit: () => void;
     onUnlock?: (item: Item) => void;
     onDeclare?: (item: Item) => void;
     onUpdateTally?: (item: Item) => void;
 }
 
-const ResultCard: React.FC<ResultCardProps> = ({ item, result, status, categoryName, onEdit, onUnlock, onDeclare, onUpdateTally }) => {
+const ResultCard: React.FC<ResultCardProps> = ({ 
+    item, 
+    result, 
+    status, 
+    categoryName, 
+    participantCount = 0,
+    scheduledInfo,
+    onEdit, 
+    onUnlock, 
+    onDeclare, 
+    onUpdateTally 
+}) => {
     const isDeclared = status === ResultStatus.DECLARED;
     const isUpdated = status === ResultStatus.UPDATED;
     const isDraft = status === ResultStatus.UPLOADED;
@@ -63,108 +76,178 @@ const ResultCard: React.FC<ResultCardProps> = ({ item, result, status, categoryN
     const getStatusInfo = () => {
         if (isDeclared) return {
             label: 'Declared',
-            icon: <CheckCircle2 size={10} strokeWidth={3} />,
-            class: 'bg-emerald-500 text-white border-emerald-400'
+            icon: <CheckCircle2 size={12} strokeWidth={2.5} className="text-emerald-500" />,
+            badgeClass: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
         };
         if (isUpdated) return {
             label: 'Updated',
-            icon: <RefreshCw size={10} strokeWidth={3} />,
-            class: 'bg-indigo-500 text-white border-indigo-400'
+            icon: <RefreshCw size={12} strokeWidth={2.5} className="text-indigo-500" />,
+            badgeClass: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
         };
         if (isDraft) return {
             label: 'Drafted',
-            icon: <ClipboardEdit size={10} strokeWidth={3} />,
-            class: 'bg-amber-500 text-white border-amber-400'
+            icon: <ClipboardEdit size={12} strokeWidth={2.5} className="text-amber-500" />,
+            badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
         };
         return {
             label: 'Pending',
-            icon: <Clock size={10} strokeWidth={3} />,
-            class: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700'
+            icon: <Clock size={12} strokeWidth={2.5} className="text-zinc-400" />,
+            badgeClass: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
         };
     };
 
     const statusInfo = getStatusInfo();
+    const winnersCount = result?.winners?.filter(w => w.position !== null && w.position !== undefined)?.length || 0;
 
     return (
-        <div className={`group relative flex flex-col h-full rounded-[1rem] sm:rounded-[1.5rem] border-2 transition-all duration-300 hover:-translate-y-1 bg-white dark:bg-[#121412] ${isDeclared ? 'border-emerald-500/20' : isUpdated ? 'border-indigo-500/20' : 'border-zinc-100 dark:border-white/5 hover:border-zinc-200'}`}>
-            <div className="p-3 sm:p-4 pb-1 sm:pb-1.5 flex justify-between items-center">
-                <div className={`px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest border flex items-center gap-1 transition-all ${statusInfo.class}`}>
+        <div className={`group relative flex flex-col h-full rounded-2xl sm:rounded-3xl border-2 transition-all duration-300 hover:shadow-xl bg-white dark:bg-[#121412] ${
+            isDeclared 
+                ? 'border-emerald-500/30 hover:border-emerald-500/50 shadow-emerald-500/5' 
+                : isUpdated 
+                ? 'border-indigo-500/30 hover:border-indigo-500/50 shadow-indigo-500/5' 
+                : isDraft
+                ? 'border-amber-500/30 hover:border-amber-500/50 shadow-amber-500/5'
+                : 'border-zinc-200/80 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20'
+        }`}>
+            {/* Card Top Bar */}
+            <div className="p-4 sm:p-5 pb-2 flex items-center justify-between gap-2">
+                <div className={`px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-black uppercase tracking-wider border flex items-center gap-1.5 transition-all ${statusInfo.badgeClass}`}>
                     {statusInfo.icon}
-                    {statusInfo.label}
+                    <span>{statusInfo.label}</span>
                 </div>
-                {isDeclared && onUnlock && (
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onUnlock(item); }} 
-                        className="p-1.5 rounded-lg text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 transition-all hover:scale-105 active:scale-95"
-                    >
-                        <LockOpen size={12} strokeWidth={3} />
-                    </button>
-                )}
+
+                <div className="flex items-center gap-2">
+                    {item.code && (
+                        <span className="px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 text-[10px] font-mono font-bold tracking-wider border border-zinc-200/60 dark:border-zinc-700/60">
+                            #{item.code}
+                        </span>
+                    )}
+                    {isDeclared && onUnlock && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onUnlock(item); }} 
+                            className="px-2.5 py-1 rounded-lg text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 transition-all hover:scale-105 active:scale-95 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs"
+                            title="Unlock event to revert to draft and enable score editing"
+                        >
+                            <LockOpen size={12} strokeWidth={2.5} />
+                            <span>Unlock</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <div className="p-3 sm:p-4 pt-1 sm:pt-1 flex-grow flex flex-col">
-                <div className="mb-2">
-                    <p className={`text-[7px] sm:text-[8px] font-black uppercase tracking-widest mb-0.5`} style={{ color: catColor }}>
-                        {categoryName}
-                    </p>
-                    <h3 className="text-sm sm:text-base font-black font-serif uppercase tracking-tight leading-tight text-amazio-primary dark:text-zinc-100 line-clamp-2">
+            {/* Card Content */}
+            <div className="p-4 sm:p-5 pt-1.5 flex-grow flex flex-col justify-between">
+                <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
+                        <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest truncate" style={{ color: catColor }}>
+                            {categoryName}
+                        </p>
+                    </div>
+
+                    <h3 className="text-base sm:text-lg font-black font-serif uppercase tracking-tight leading-snug text-amazio-primary dark:text-zinc-100 line-clamp-2">
                         {item.name}
                     </h3>
+
+                    {/* Metadata tags */}
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-3">
+                        <span 
+                            className="px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider border"
+                            style={{ backgroundColor: perfColor + '12', color: perfColor, borderColor: perfColor + '30' }}
+                        >
+                            {item.performanceType}
+                        </span>
+                        <span 
+                            className="px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider border"
+                            style={{ backgroundColor: typeColor + '12', color: typeColor, borderColor: typeColor + '30' }}
+                        >
+                            {item.type}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60">
+                            <Users size={11} className="shrink-0 text-zinc-400" />
+                            <span>{participantCount} {item.type === ItemType.GROUP ? 'Groups' : 'Participants'}</span>
+                        </span>
+                        {scheduledInfo && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60">
+                                <Clock size={11} className="shrink-0 text-zinc-400" />
+                                <span>{scheduledInfo.stage} · {scheduledInfo.time}</span>
+                            </span>
+                        )}
+                    </div>
                 </div>
 
-                <div className="flex flex-wrap gap-1 mt-auto">
-                    <span 
-                        className="px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-tighter border"
-                        style={{ backgroundColor: perfColor + '10', color: perfColor, borderColor: perfColor + '20' }}
-                    >
-                        {item.performanceType}
-                    </span>
-                    <span 
-                        className="px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-tighter border"
-                        style={{ backgroundColor: typeColor + '10', color: typeColor, borderColor: typeColor + '20' }}
-                    >
-                        {item.type}
-                    </span>
-                </div>
+                {/* Status Indicator Bar */}
+                {isDeclared ? (
+                    <div className="mt-3.5 py-2 px-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/25 border border-emerald-200/70 dark:border-emerald-800/50 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200">
+                        <span className="flex items-center gap-1.5 font-bold">
+                            <Trophy size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Official Verdict Live</span>
+                        </span>
+                        <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                            {winnersCount > 0 ? `${winnersCount} Positions` : 'Active'}
+                        </span>
+                    </div>
+                ) : isUpdated ? (
+                    <div className="mt-3.5 py-2 px-3 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/25 border border-indigo-200/70 dark:border-indigo-800/50 flex items-center justify-between text-xs text-indigo-900 dark:text-indigo-200">
+                        <span className="flex items-center gap-1.5 font-bold">
+                            <RefreshCw size={13} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span>Scores Computed Internally</span>
+                        </span>
+                        <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+                            Hidden from Public
+                        </span>
+                    </div>
+                ) : null}
             </div>
 
-            <div className="p-3 sm:p-4 pt-0 mt-1 border-t border-zinc-50 dark:border-white/5 pt-3 sm:pt-4">
-                <div className="flex items-center gap-1.5">
+            {/* Action Buttons: Score, Update, Declare */}
+            <div className="p-4 sm:p-5 pt-3 sm:pt-4 border-t border-zinc-100 dark:border-zinc-800/80 mt-auto">
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                    {/* 1. Score Button */}
                     <button 
                         onClick={onEdit}
-                        className="flex-grow py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-widest text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 bg-amazio-primary text-white hover:opacity-95"
+                        className="w-full py-2.5 px-2 rounded-xl font-black uppercase tracking-wider text-[11px] sm:text-xs shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 bg-amazio-primary hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-white dark:text-zinc-950 cursor-pointer"
+                        title="Open scoring sheet to enter or inspect marks"
                     >
-                        {isDeclared ? <Eye size={12}/> : <Edit3 size={12}/>}
-                        {isDeclared ? 'View' : 'Score'}
+                        {isDeclared ? <Eye size={14} className="shrink-0" /> : <Edit3 size={14} className="shrink-0" />}
+                        <span className="truncate">Score</span>
                     </button>
-                    {onUpdateTally && !isDeclared && (
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onUpdateTally(item); }}
-                            className={`px-2 sm:px-2.5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-wider text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 ${
-                                isUpdated 
-                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                                    : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-600 hover:text-white'
-                            }`}
-                            title="Push Internal Update / Recalculate Points"
-                        >
-                            <UploadCloud size={13} strokeWidth={2.5} />
-                            <span className="hidden sm:inline">Update</span>
-                        </button>
-                    )}
-                    {onDeclare && (
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onDeclare(item); }}
-                            className={`px-2 sm:px-2.5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black uppercase tracking-wider text-[8px] sm:text-[9px] shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 ${
-                                isDeclared 
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-600 hover:text-white' 
-                                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-500/20'
-                            }`}
-                            title={isDeclared ? "Re-Declare Result" : "Declare Official Result"}
-                        >
-                            <Calculator size={13} strokeWidth={2.5} />
-                            <span className="hidden sm:inline">{isDeclared ? 'Re-Declare' : 'Declare'}</span>
-                        </button>
-                    )}
+
+                    {/* 2. Update Button */}
+                    <button 
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (onUpdateTally) onUpdateTally(item); 
+                        }}
+                        disabled={!onUpdateTally}
+                        className={`w-full py-2.5 px-2 rounded-xl font-black uppercase tracking-wider text-[11px] sm:text-xs shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                            isUpdated 
+                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25' 
+                                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80'
+                        }`}
+                        title={onUpdateTally ? "Push internal score update and calculate points" : "Requires manager permission"}
+                    >
+                        <UploadCloud size={14} className="shrink-0" strokeWidth={2.5} />
+                        <span className="truncate">Update</span>
+                    </button>
+
+                    {/* 3. Declare Button */}
+                    <button 
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (onDeclare) onDeclare(item); 
+                        }}
+                        disabled={!onDeclare}
+                        className={`w-full py-2.5 px-2 rounded-xl font-black uppercase tracking-wider text-[11px] sm:text-xs shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                            isDeclared 
+                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25' 
+                                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80'
+                        }`}
+                        title={onDeclare ? (isDeclared ? "Re-Declare official result" : "Declare official result to projector and leaderboard") : "Requires manager permission"}
+                    >
+                        <Trophy size={14} className="shrink-0" strokeWidth={2.5} />
+                        <span className="truncate">{isDeclared ? 'Re-Declare' : 'Declare'}</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -685,14 +768,14 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                     
                     <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                         {isDeclared && (
-                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm">
-                                <CheckCircle2 size={13} strokeWidth={2.5} className="text-emerald-500" />
+                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
+                                <CheckCircle2 size={14} strokeWidth={2.5} className="text-emerald-500" />
                                 <span>Verdict Declared (Live)</span>
                             </div>
                         )}
                         {isUpdated && !isDeclared && (
-                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm">
-                                <RefreshCw size={13} strokeWidth={2.5} className="text-indigo-500" />
+                            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm">
+                                <RefreshCw size={14} strokeWidth={2.5} className="text-indigo-500" />
                                 <span>Scores Updated (Internal)</span>
                             </div>
                         )}
@@ -702,7 +785,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                             <button 
                                 onClick={() => executeSaveDraft(selectedItem)} 
                                 disabled={scoredParticipants.length === 0 || isSaving} 
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm transition-all active:scale-95 disabled:opacity-50 ${
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all active:scale-95 disabled:opacity-50 ${
                                     isJudge 
                                         ? 'bg-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-700' 
                                         : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-amazio-primary dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800'
@@ -718,7 +801,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                             <button 
                                 onClick={() => openUpdateModal(selectedItem)} 
                                 disabled={scoredParticipants.length === 0 || isSaving} 
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 ${
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 ${
                                     isUpdated
                                         ? 'bg-indigo-700 text-white shadow-indigo-600/30'
                                         : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25'
@@ -735,14 +818,14 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                             <button 
                                 onClick={() => openDeclareModal(selectedItem)} 
                                 disabled={scoredParticipants.length === 0 || isSaving} 
-                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 ${
+                                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 ${
                                     isDeclared
                                         ? 'bg-emerald-700 text-white shadow-emerald-600/30'
                                         : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25'
                                 }`}
                                 title="Publish official verdict to live projector displays, dashboard, and points"
                             >
-                                <Calculator size={14} strokeWidth={2.5}/> 
+                                <Trophy size={14} strokeWidth={2.5}/> 
                                 {isSaving ? 'Declaring...' : isDeclared ? 'Re-Declare' : 'Declare'}
                             </button>
                         )}
@@ -752,7 +835,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                             <button 
                                 onClick={() => openUnlockModal(selectedItem)} 
                                 disabled={isSaving} 
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all"
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm hover:bg-amber-100 dark:hover:bg-amber-900/40 active:scale-95 transition-all"
                                 title="Unlock to revert to draft and allow editing"
                             >
                                 <LockOpen size={14}/> Unlock
@@ -1005,7 +1088,7 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {filteredItems.map(item => (
                     <ResultCard 
                         key={item.id} 
@@ -1013,6 +1096,8 @@ const JudgementPage: React.FC<{ isMobile: boolean }> = ({ isMobile }) => {
                         result={state.results.find(r => r.itemId === item.id)}
                         status={state.results.find(r => r.itemId === item.id)?.status || ResultStatus.NOT_UPLOADED}
                         categoryName={state.categories.find(c => c.id === item.categoryId)?.name || 'N/A'}
+                        participantCount={(state.participants || []).filter(p => p.itemIds.includes(item.id)).length}
+                        scheduledInfo={(state.schedule || []).find(s => s.itemId === item.id)}
                         onEdit={() => setSelectedItemId(item.id)}
                         onDeclare={isManager ? () => openDeclareModal(item) : undefined}
                         onUpdateTally={isManager ? () => openUpdateModal(item) : undefined}

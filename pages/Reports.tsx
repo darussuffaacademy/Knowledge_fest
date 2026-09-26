@@ -974,6 +974,479 @@ const ReportsPage: React.FC = () => {
     setReportContent({ title: 'Checklist Matrix', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
 
+  const generateTeamChecklistMatrix = (selectedTeamId?: string) => {
+    if (!state) return;
+
+    const teamsToProcess = selectedTeamId 
+      ? filteredTeams.filter(t => t.id === selectedTeamId)
+      : filteredTeams;
+
+    if (teamsToProcess.length === 0) {
+      const html = `${getStyles()}${getWatermarkHTML()}${getBrandingHeaderHTML('Team Checklist Matrix')}<p style="padding: 50px; text-align: center; opacity: 0.5;">No teams match the current filters.</p>`;
+      setReportContent({
+        title: 'Team Checklist Matrix',
+        content: html,
+        isSearchable: true,
+        hideHeader: !showPrintHeader,
+        hideFooter: !showPrintFooter
+      });
+      return;
+    }
+
+    // Classify categories into: Sub Zone, High Zone, and G-Zone (General)
+    const gZoneCats = (state.categories || []).filter(c => c.isGeneralCategory || /g[\s_-]?zone|general/i.test(c.name));
+    const nonGCats = (state.categories || []).filter(c => !gZoneCats.some(g => g.id === c.id));
+
+    const subCats = nonGCats.filter(c => /sub/i.test(c.name));
+    const highCats = nonGCats.filter(c => !subCats.some(s => s.id === c.id) && /high|senior/i.test(c.name));
+
+    // Robust fallbacks if category names don't literally contain 'sub' or 'high'
+    const remainingNonGCats = nonGCats.filter(c => !subCats.some(s => s.id === c.id) && !highCats.some(h => h.id === c.id));
+    if (subCats.length === 0 && remainingNonGCats.length > 0) {
+      subCats.push(remainingNonGCats.shift()!);
+    }
+    if (highCats.length === 0 && remainingNonGCats.length > 0) {
+      highCats.push(remainingNonGCats.shift()!);
+    }
+    if (remainingNonGCats.length > 0) {
+      highCats.push(...remainingNonGCats);
+    }
+
+    const subCatIds = new Set(subCats.map(c => c.id));
+    const highCatIds = new Set(highCats.map(c => c.id));
+    const gZoneCatIds = new Set(gZoneCats.map(c => c.id));
+
+    const itemTypeFilter = globalFilters?.itemType || [];
+    const perfFilter = globalFilters?.performanceType || [];
+    const itemFilter = globalFilters?.itemId || [];
+
+    const filterItem = (i: Item) => {
+      if (itemFilter.length > 0 && !itemFilter.includes(i.id)) return false;
+      if (perfFilter.length > 0 && !perfFilter.includes(i.performanceType)) return false;
+      if (itemTypeFilter.length > 0 && !itemTypeFilter.some(t => t.toLowerCase() === (i.type || '').toLowerCase())) return false;
+      return true;
+    };
+
+    const subItems = (state.items || []).filter(i => subCatIds.has(i.categoryId) && filterItem(i)).sort((a,b) => a.name.localeCompare(b.name));
+    const highItems = (state.items || []).filter(i => highCatIds.has(i.categoryId) && filterItem(i)).sort((a,b) => a.name.localeCompare(b.name));
+    const gZoneItems = (state.items || []).filter(i => gZoneCatIds.has(i.categoryId) && filterItem(i)).sort((a,b) => a.name.localeCompare(b.name));
+
+    const matrixReportStyles = `
+      <style>
+        .team-matrix-container { margin-bottom: 3.5rem; page-break-inside: avoid; }
+        .team-matrix-banner {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 2px solid var(--primary);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .team-matrix-title-group { display: flex; align-items: center; gap: 14px; }
+        .team-avatar-box {
+            width: 46px;
+            height: 46px;
+            background: var(--primary);
+            color: #fff;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 900;
+            font-family: 'Roboto Slab', serif;
+            text-transform: uppercase;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .team-name-heading {
+            font-family: 'Roboto Slab', serif;
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        .team-subline { font-size: 11px; color: #475569; margin-top: 3px; font-weight: 600; }
+        .team-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .team-pill {
+            background: #fff;
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-primary);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .zone-matrix-section {
+            margin-top: 18px;
+            margin-bottom: 26px;
+            page-break-inside: avoid;
+        }
+        .zone-header-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 15px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border: 1px solid var(--border);
+        }
+        .zone-strip-sub { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+        .zone-strip-high { background: #eef2ff; border-color: #c7d2fe; color: #3730a3; }
+        .zone-strip-gzone { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+        .zone-title-text { font-family: 'Roboto Slab', serif; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        .zone-meta-text { font-size: 10px; font-weight: 700; opacity: 0.85; text-transform: uppercase; }
+        
+        .matrix-scroll-wrapper {
+            overflow-x: auto;
+            max-width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            margin-bottom: 12px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .team-matrix-table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 100%;
+            font-size: 10px;
+            table-layout: auto !important;
+        }
+        .team-matrix-table th, .team-matrix-table td {
+            border: 1px solid var(--border);
+            padding: 4px 6px;
+            text-align: center;
+        }
+        .team-matrix-header-cell {
+            height: 155px;
+            vertical-align: bottom;
+            padding: 8px 2px !important;
+            width: 32px;
+            min-width: 30px;
+            max-width: 36px;
+            position: relative;
+            background: #f8fafc;
+        }
+        .team-matrix-header-text {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            white-space: nowrap;
+            text-align: left;
+            font-weight: 800;
+            font-size: 9px;
+            color: var(--primary);
+            text-transform: uppercase;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        .part-id-cell {
+            text-align: left !important;
+            font-weight: 700;
+            min-width: 180px;
+            max-width: 230px;
+            padding-left: 8px !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: #fff;
+        }
+        .tier-pill {
+            display: inline-block;
+            font-size: 8px;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 1px 5px;
+            border-radius: 4px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+        .tier-sub { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+        .tier-high { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+        .tier-general { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+        .check-mark {
+            font-family: serif;
+            font-weight: 900;
+            color: var(--brand-green);
+            font-size: 13px;
+            line-height: 1;
+            display: inline-block;
+        }
+        .empty-box {
+            display: inline-block;
+            width: 11px;
+            height: 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 2px;
+        }
+        .total-badge-col {
+            font-weight: 800;
+            background: #f8fafc;
+            color: var(--secondary);
+            font-size: 10px;
+            min-width: 44px;
+        }
+        .summary-row td {
+            background: #f1f5f9 !important;
+            font-weight: 800;
+            font-size: 10px;
+            color: var(--primary);
+            border-top: 2px solid var(--border);
+        }
+        .team-nav-anchors {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 25px;
+            padding: 10px 14px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .team-nav-btn {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 6px;
+            background: #fff;
+            border: 1px solid var(--border);
+            font-size: 10px;
+            font-weight: 800;
+            color: var(--primary);
+            text-transform: uppercase;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .team-nav-btn:hover {
+            background: var(--primary);
+            color: #fff !important;
+        }
+        @media print {
+            .matrix-scroll-wrapper { overflow: visible !important; border: none; }
+            .team-matrix-container { page-break-inside: avoid; }
+            .zone-matrix-section { page-break-inside: avoid; }
+            .team-nav-anchors { display: none !important; }
+        }
+      </style>
+    `;
+
+    const renderZoneTableHTML = (
+      zoneName: string,
+      zoneBadgeClass: string,
+      zoneItems: Item[],
+      zoneParticipants: Participant[],
+      isGZone: boolean
+    ) => {
+      if (zoneItems.length === 0) {
+        return `
+          <div class="zone-matrix-section">
+              <div class="zone-header-strip ${zoneBadgeClass}">
+                  <span class="zone-title-text">${zoneName} Matrix</span>
+                  <span class="zone-meta-text">0 Items Configured</span>
+              </div>
+              <p style="padding: 10px; font-style: italic; color: #888; font-size: 11px;">No items configured for this zone matching active filters.</p>
+          </div>
+        `;
+      }
+
+      if (zoneParticipants.length === 0) {
+        return `
+          <div class="zone-matrix-section">
+              <div class="zone-header-strip ${zoneBadgeClass}">
+                  <span class="zone-title-text">${zoneName} Matrix</span>
+                  <span class="zone-meta-text">${zoneItems.length} Items &nbsp;•&nbsp; 0 Delegates</span>
+              </div>
+              <p style="padding: 10px; font-style: italic; color: #888; font-size: 11px;">No participants enrolled for this team in ${zoneName}.</p>
+          </div>
+        `;
+      }
+
+      // Precompute item enrolled counts
+      const itemEnrolledCounts: Record<string, number> = {};
+      zoneItems.forEach(item => {
+        let count = 0;
+        zoneParticipants.forEach(p => {
+          if ((p.itemIds || []).includes(item.id)) count++;
+        });
+        itemEnrolledCounts[item.id] = count;
+      });
+
+      return `
+        <div class="zone-matrix-section">
+            <div class="zone-header-strip ${zoneBadgeClass}">
+                <span class="zone-title-text">${zoneName} Checklist Matrix</span>
+                <span class="zone-meta-text">${zoneItems.length} Items &nbsp;•&nbsp; ${zoneParticipants.length} Delegates ${isGZone ? '(Combined Tier)' : ''}</span>
+            </div>
+            <div class="matrix-scroll-wrapper">
+                <table class="team-matrix-table">
+                    <thead>
+                        <tr>
+                            <th class="part-id-cell" style="background: #f8fafc;">
+                                Participant Identity (Chest No & Name)
+                            </th>
+                            ${zoneItems.map(item => `
+                                <th class="team-matrix-header-cell" title="${item.name} (${item.type} - ${item.performanceType})">
+                                    <div class="team-matrix-header-text">
+                                        ${item.code ? `<span style="opacity: 0.6; font-size: 8px;">#${item.code} </span>` : ''}
+                                        <span>${item.name}</span>
+                                        <span style="opacity: 0.6; font-size: 8px; margin-top: 2px;">(${item.type === ItemType.GROUP ? 'G' : 'S'})</span>
+                                    </div>
+                                </th>
+                            `).join('')}
+                            <th class="total-badge-col" style="vertical-align: middle; padding: 4px;">
+                                Total
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${zoneParticipants.map(p => {
+                            const enrolledCount = zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length;
+                            let tierPill = '';
+                            if (isGZone) {
+                                const isSubTier = subCatIds.has(p.categoryId);
+                                const isHighTier = highCatIds.has(p.categoryId);
+                                if (isSubTier) tierPill = '<span class="tier-pill tier-sub">Sub</span>';
+                                else if (isHighTier) tierPill = '<span class="tier-pill tier-high">High</span>';
+                                else tierPill = '<span class="tier-pill tier-general">G-Zone</span>';
+                            }
+
+                            return `
+                                <tr>
+                                    <td class="part-id-cell">
+                                        <span style="font-weight: 800; color: var(--primary); margin-right: 4px;">${p.chestNumber || '-'}</span>
+                                        <span style="color: var(--text-primary); font-weight: 700;">${p.name}</span>
+                                        ${tierPill}
+                                    </td>
+                                    ${zoneItems.map(item => {
+                                        const isEnrolled = (p.itemIds || []).includes(item.id);
+                                        return `
+                                            <td>
+                                                ${isEnrolled 
+                                                    ? (showEnrollmentMarks ? '<span class="check-mark">&#10004;</span>' : '<span class="empty-box"></span>') 
+                                                    : ''}
+                                            </td>
+                                        `;
+                                    }).join('')}
+                                    <td class="total-badge-col" style="font-weight: 800; color: ${enrolledCount > 0 ? 'var(--secondary)' : '#aaa'};">
+                                        ${enrolledCount}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr class="summary-row">
+                            <td class="part-id-cell" style="font-weight: 800; text-transform: uppercase;">
+                                Team Enrolled Total
+                            </td>
+                            ${zoneItems.map(item => `
+                                <td>${itemEnrolledCounts[item.id] || 0}</td>
+                            `).join('')}
+                            <td class="total-badge-col" style="color: var(--primary);">
+                                ${zoneParticipants.reduce((sum, p) => sum + zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length, 0)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+      `;
+    };
+
+    let html = `${getStyles()}${matrixReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Team Checklist Matrix - Sub, High & G Zones')}`;
+
+    if (teamsToProcess.length > 1) {
+      html += `
+        <div class="team-nav-anchors">
+            <span style="font-size: 10px; font-weight: 800; color: #64748b; margin-right: 4px; text-transform: uppercase;">Jump to Team:</span>
+            ${teamsToProcess.map(t => `<a href="#team-${t.id}" class="team-nav-btn">${t.name}</a>`).join('')}
+        </div>
+      `;
+    }
+
+    teamsToProcess.forEach((team, teamIndex) => {
+      const allTeamParts = (state.participants || []).filter(p => p.teamId === team.id);
+      const leader = allTeamParts.find(p => p.role === 'leader');
+      const assistant = allTeamParts.find(p => p.role === 'assistant');
+
+      // Sub Zone participants of this team:
+      const subParts = allTeamParts.filter(p => 
+        subCatIds.has(p.categoryId) || (p.itemIds || []).some(id => subItems.some(i => i.id === id))
+      ).sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
+
+      // High Zone participants of this team:
+      const highParts = allTeamParts.filter(p => 
+        highCatIds.has(p.categoryId) || (p.itemIds || []).some(id => highItems.some(i => i.id === id))
+      ).sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
+
+      // G-Zone participants of this team:
+      const enrolledGParts = allTeamParts.filter(p => 
+        gZoneCatIds.has(p.categoryId) || (p.itemIds || []).some(id => gZoneItems.some(i => i.id === id))
+      ).sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
+      const gParts = enrolledGParts.length > 0 ? enrolledGParts : allTeamParts.sort((a, b) => (a.chestNumber || '').localeCompare(b.chestNumber || '', undefined, { numeric: true }));
+
+      const uniqueTeamItems = new Set<string>();
+      allTeamParts.forEach(p => (p.itemIds || []).forEach(id => uniqueTeamItems.add(id)));
+
+      const wrapperClass = (isPaginated && teamIndex > 0) ? 'report-block team-matrix-container page-break-before-always' : 'report-block team-matrix-container';
+
+      html += `
+        <div class="${wrapperClass}" id="team-${team.id}">
+          <div class="team-matrix-banner">
+            <div class="team-matrix-title-group">
+              <div class="team-avatar-box">${team.name.charAt(0)}</div>
+              <div>
+                <h3 class="team-name-heading">${team.name}</h3>
+                <div class="team-subline">
+                  <strong>Official Leader:</strong> ${leader ? leader.name : '<span style="opacity:0.5;">None</span>'} 
+                  ${assistant ? ` &nbsp;|&nbsp; <strong>Assistant:</strong> ${assistant.name}` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="team-pills">
+              <div class="team-pill"><strong>${allTeamParts.length}</strong> Total Delegates</div>
+              <div class="team-pill" style="color: #065f46; border-color: #a7f3d0;"><strong>${subParts.length}</strong> Sub Zone</div>
+              <div class="team-pill" style="color: #3730a3; border-color: #c7d2fe;"><strong>${highParts.length}</strong> High Zone</div>
+              <div class="team-pill" style="color: #9a3412; border-color: #fed7aa;"><strong>${gParts.length}</strong> G-Zone</div>
+              <div class="team-pill"><strong>${uniqueTeamItems.size}</strong> Items Registered</div>
+            </div>
+          </div>
+
+          <!-- 1. Sub Zone Matrix -->
+          ${renderZoneTableHTML('Sub Zone', 'zone-strip-sub', subItems, subParts, false)}
+
+          <!-- 2. High Zone Matrix -->
+          ${renderZoneTableHTML('High Zone', 'zone-strip-high', highItems, highParts, false)}
+
+          <!-- 3. G-Zone Matrix -->
+          ${renderZoneTableHTML('G-Zone', 'zone-strip-gzone', gZoneItems, gParts, true)}
+        </div>
+      `;
+    });
+
+    const reportTitle = selectedTeamId 
+      ? `Team Checklist Matrix - ${getTeamName(selectedTeamId)}`
+      : 'Teams Checklist Matrix (Sub, High & G Zones)';
+
+    setReportContent({
+      title: reportTitle,
+      content: html,
+      isSearchable: true,
+      hideHeader: !showPrintHeader,
+      hideFooter: !showPrintFooter
+    });
+  };
+
   const generateTemplatePage = (withLines: boolean) => {
     if (!state) return;
     const watermark = getWatermarkHTML();
@@ -1095,6 +1568,45 @@ const ReportsPage: React.FC = () => {
              <Card title="Reporting List" action={<button onClick={generateItemsChecklist} className="text-indigo-600 hover:text-indigo-800"><CheckSquare size={20}/></button>}> {filteredItems.length > 0 && <CountBadge count={filteredItems.length} />} <div className="text-center p-4"> <Layers className="h-12 w-12 mx-auto text-emerald-400 mb-2" /> <p className="text-sm text-zinc-500">Checklists by single or group registry.</p> </div> </Card>
              <Card title="Valuation Sheet" action={<button onClick={generateValuationSheet} className="text-indigo-600 hover:text-indigo-800"><FileCheck size={20}/></button>}> {filteredItems.length > 0 && <CountBadge count={filteredItems.length} />} <div className="text-center p-4"> <FileCheck className="h-12 w-12 mx-auto text-amber-500 mb-2" /> <p className="text-sm text-zinc-500">Anonymous scoring sheets for judges.</p> </div> </Card>
              <Card title="Checklist Matrix" action={<button onClick={generateParticipantItemChecklist} className="text-indigo-600 hover:text-indigo-800"><Grid3X3 size={20}/></button>}> {filteredItems.length > 0 && <CountBadge count={filteredItems.length} />} <div className="text-center p-4"> <Grid3X3 className="h-12 w-12 mx-auto text-teal-400 mb-2" /> <p className="text-sm text-zinc-500">Cross-reference grid.</p> </div> </Card>
+             <Card 
+                title="Team Checklist Matrix" 
+                action={
+                    <button 
+                        onClick={() => generateTeamChecklistMatrix()} 
+                        className="text-indigo-600 hover:text-indigo-800 transition-colors" 
+                        title="Generate Team Checklist Matrix (Sub, High & G Zones)"
+                    >
+                        <CheckSquare size={20}/>
+                    </button>
+                }
+             > 
+                {filteredTeams.length > 0 && <CountBadge count={filteredTeams.length} label="Teams" />} 
+                <div className="p-4 flex flex-col justify-between h-full"> 
+                    <div className="text-center mb-3"> 
+                        <CheckSquare className="h-12 w-12 mx-auto text-emerald-500 dark:text-emerald-400 mb-2" /> 
+                        <p className="text-sm text-zinc-500">Separate checklist matrix for each team across Sub, High & G Zones.</p> 
+                    </div> 
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex flex-wrap items-center justify-center gap-1.5">
+                        <button
+                            onClick={() => generateTeamChecklistMatrix()}
+                            className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all active:scale-95 cursor-pointer"
+                            title="Generate checklist matrix for all teams separated"
+                        >
+                            All Teams
+                        </button>
+                        {filteredTeams.map(t => (
+                            <button
+                                key={t.id}
+                                onClick={() => generateTeamChecklistMatrix(t.id)}
+                                className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 truncate max-w-[100px] transition-all active:scale-95 cursor-pointer"
+                                title={`Generate checklist matrix specifically for ${t.name}`}
+                            >
+                                {t.name}
+                            </button>
+                        ))}
+                    </div>
+                </div> 
+             </Card>
              <Card title="Writing Template" action={<button onClick={() => generateTemplatePage(true)} className="text-indigo-600 hover:text-indigo-800"><File size={20}/></button>}> <div className="text-center p-4"> <File className="h-12 w-12 mx-auto text-slate-400 mb-2" /> <p className="text-sm text-zinc-500">Blank or lined pages with event watermark.</p> </div> </Card>
              <Card title="Program Manual" action={<button onClick={generateProgramManual} className="text-indigo-600 hover:text-indigo-800"><Book size={20}/></button>}> {filteredItems.length > 0 && <CountBadge count={filteredItems.length} />} <div className="text-center p-4"> <Book className="h-12 w-12 mx-auto text-orange-400 mb-2" /> <p className="text-sm text-zinc-500">Handbook with rules and details.</p> </div> </Card>
              <Card title="Schedule" action={<button onClick={generateScheduleReport} className="text-indigo-600 hover:text-indigo-800"><Calendar size={20}/></button>}> {filteredSchedule.length > 0 && <CountBadge count={filteredSchedule.length} />} <div className="text-center p-4"> <Calendar className="h-12 w-12 mx-auto text-amber-400 mb-2" /> <p className="text-sm text-zinc-500">Detailed event schedule and timeline.</p> </div> </Card>

@@ -380,7 +380,7 @@ const App: React.FC = () => {
       <div className={`flex-1 flex flex-col h-screen max-w-full overflow-hidden relative transition-all duration-500 ease-in-out ${currentUser && state.settings.enableFloatingNav === true && isMobile && !isSidebarExpanded && !isMobileSticky ? 'pl-0' : ''} ${currentUser && isMobileSticky ? 'pl-[50px]' : ''}`}>
         <Header pageTitle={activeTab} onMenuClick={toggleSidebarExpansion} handleLogout={logout} currentUser={currentUser} theme={theme} toggleTheme={toggleTheme} isVisible={isHeaderVisible} onTitleClick={() => handleSetActiveTab(TABS.LANDING)} />
         <main ref={mainContentRef} onScroll={handleMainScroll} onClick={handleContentClick} className={`flex-1 overflow-y-auto relative scroll-smooth custom-scrollbar ${isFullHeightTab ? 'p-0' : 'px-4 py-4 md:px-6 md:py-6'} pb-[env(safe-area-inset-bottom)]`}>
-            <div className={`transition-all ${isFullHeightTab ? 'flex-1 h-full flex flex-col' : 'max-w-5xl mx-auto md:space-y-8 sm:space-y-6'}`}>
+            <div className={`transition-all ${isFullHeightTab ? 'flex-1 h-full flex flex-col' : activeTab === TABS.SCORING_RESULTS ? 'max-w-6xl xl:max-w-7xl mx-auto md:space-y-8 sm:space-y-6' : 'max-w-5xl mx-auto md:space-y-8 sm:space-y-6'}`}>
                 {!isFullHeightTab && (
                   <div className="md:hidden">
                     <div className="h-14"></div>
