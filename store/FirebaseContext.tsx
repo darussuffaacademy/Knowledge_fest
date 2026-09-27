@@ -198,6 +198,9 @@ interface FirebaseContextType {
   deleteMultipleParticipants: (ids: string[]) => Promise<void>;
   setSchedule: (payload: ScheduledEvent[]) => Promise<void>;
   addScheduleEvent: (payload: ScheduledEvent) => Promise<void>; 
+  deleteScheduleEvent: (id: string) => Promise<void>;
+  deleteMultipleScheduleEvents: (ids: string[]) => Promise<void>;
+  clearSchedule: () => Promise<void>;
   updateTabulationEntry: (payload: TabulationEntry) => Promise<void>;
   updateMultipleTabulationEntries: (payload: TabulationEntry[]) => Promise<void>;
   deleteEventTabulation: (itemId: string) => Promise<void>;
@@ -295,6 +298,9 @@ const defaultContextValue: FirebaseContextType = {
   deleteMultipleParticipants: async () => {},
   setSchedule: async () => {},
   addScheduleEvent: async () => {},
+  deleteScheduleEvent: async () => {},
+  deleteMultipleScheduleEvents: async () => {},
+  clearSchedule: async () => {},
   updateTabulationEntry: async () => {},
   updateMultipleTabulationEntries: async () => {},
   deleteEventTabulation: async () => {},
@@ -535,8 +541,13 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
         await setDoc(docRef, { value: sanitizedValue }, { merge: false });
     } catch (err: any) {
-        console.error(`Error writing document ${key}:`, err);
-        throw err;
+        console.warn(`Firestore write error for ${key}:`, err?.message || err);
+        try {
+            localStorage.setItem(`artfest_cache_${key}`, JSON.stringify(cleanData(value)));
+        } catch {}
+        if (err?.message?.includes('1MB')) {
+            throw err;
+        }
     }
   };
 
@@ -719,6 +730,20 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     },
     setSchedule: (p) => writeDoc('schedule', p),
     addScheduleEvent: async (p) => writeDoc('schedule', [...(state?.schedule || []), p]),
+    deleteScheduleEvent: async (id: string) => {
+        if (!state) return;
+        const next = (state.schedule || []).filter(s => s.id !== id);
+        await writeDoc('schedule', next);
+    },
+    deleteMultipleScheduleEvents: async (ids: string[]) => {
+        if (!state) return;
+        const next = (state.schedule || []).filter(s => !ids.includes(s.id));
+        await writeDoc('schedule', next);
+    },
+    clearSchedule: async () => {
+        if (!state) return;
+        await writeDoc('schedule', []);
+    },
     updateTabulationEntry: async (p) => {
         const next = (state?.tabulation || []).filter(t => t.id !== p.id);
         next.push(p);

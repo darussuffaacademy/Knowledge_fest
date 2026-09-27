@@ -1,5 +1,8 @@
 {
   "name": "Amazio Knowledge Fest 2026",
   "description": "The official management terminal for the Amazio Knowledge Fest 2026 Edition. Dedicated specifically for orchestrating talent and intelligence.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
