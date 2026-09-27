@@ -1039,11 +1039,12 @@ const ReportsPage: React.FC = () => {
 
   const generateParticipantItemChecklist = () => {
     if (!state) return;
+    const MAX_ITEMS_PER_CHUNK = 13;
     const matrixStyles = `
       <style>
-        .matrix-table { border-collapse: collapse; width: auto; min-width: 100%; font-size: 10px; }
+        .matrix-table { border-collapse: collapse; width: 100%; font-size: 10px; table-layout: fixed; margin-bottom: 12px; }
         .matrix-table th, .matrix-table td { border: 1px solid #E0E2D9; padding: 4px; text-align: center; }
-        .matrix-header-cell { height: 160px; vertical-align: bottom; padding: 10px 2px !important; width: 30px; min-width: 30px; position: relative; }
+        .matrix-header-cell { height: 155px; vertical-align: bottom; padding: 8px 2px !important; width: 34px; min-width: 32px; max-width: 38px; position: relative; background: #f8fafc; }
         .matrix-header-text-container {
             writing-mode: vertical-rl;
             transform: rotate(180deg);
@@ -1059,8 +1060,16 @@ const ReportsPage: React.FC = () => {
             align-items: center;
             justify-content: flex-start;
         }
-        .participant-name-cell { text-align: left !important; font-weight: 700; min-width: 200px; padding-left: 10px !important; }
+        .participant-name-cell { text-align: left !important; font-weight: 700; width: 190px; min-width: 170px; max-width: 210px; padding-left: 8px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .check-mark { font-family: serif; font-weight: bold; color: var(--brand-green); font-size: 14px; }
+        .matrix-chunk-header { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 8px; }
+        .matrix-chunk-header h4 { margin: 0; }
+        .matrix-chunk-badge { font-size: 10px; font-weight: 800; color: #6366f1; background: #e0e7ff; padding: 3px 8px; border-radius: 6px; }
+        @media print {
+            .matrix-page-break { page-break-before: always !important; break-before: page !important; margin-top: 15px !important; }
+            .matrix-table { width: 100% !important; page-break-inside: auto !important; }
+            .matrix-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+        }
       </style>
     `;
     let html = `${getStyles()}${matrixStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Registration Matrix')}<h3>Participant Registry Matrix</h3>`;
@@ -1081,41 +1090,58 @@ const ReportsPage: React.FC = () => {
         }).sort((a, b) => a.chestNumber.localeCompare(b.chestNumber, undefined, { numeric: true }));
 
         if (catParticipants.length === 0) return;
-        
-        html += `
-            <div class="report-block page-break-before-always">
-                <h4 style="margin-top: 20px;">${cat.name}</h4>
-                <table class="matrix-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 200px; text-align: left; padding-left: 10px;">Participant Identity</th>
-                            ${catItems.map(item => `
-                                <th class="matrix-header-cell">
-                                    <div class="matrix-header-text-container">
-                                        ${item.name}
-                                    </div>
-                                </th>
-                            `).join('')}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${catParticipants.map(p => {
-                            const isExternalCat = p.categoryId !== cat.id;
-                            const extCatName = isExternalCat ? (state.categories || []).find(c => c.id === p.categoryId)?.name : null;
-                            const catBadge = extCatName ? `<span style="font-size: 8px; font-weight: 700; opacity: 0.7; margin-left: 4px; color: #6366f1;">(${extCatName})</span>` : '';
-                            return `
-                                <tr>
-                                    <td class="participant-name-cell">${p.chestNumber} - ${p.name}${catBadge}</td>
-                                    ${catItems.map(item => `
-                                        <td>${(p.itemIds || []).includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
-                                    `).join('')}
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
+
+        const totalChunks = Math.ceil(catItems.length / MAX_ITEMS_PER_CHUNK);
+
+        for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+            const chunkItems = catItems.slice(chunkIdx * MAX_ITEMS_PER_CHUNK, (chunkIdx + 1) * MAX_ITEMS_PER_CHUNK);
+            const startNum = chunkIdx * MAX_ITEMS_PER_CHUNK + 1;
+            const endNum = Math.min((chunkIdx + 1) * MAX_ITEMS_PER_CHUNK, catItems.length);
+            const isMultiChunk = totalChunks > 1;
+            const isLastChunk = chunkIdx === totalChunks - 1;
+            const breakClass = (chunkIdx > 0 || isPaginated) ? 'page-break-before-always matrix-page-break' : '';
+
+            html += `
+                <div class="report-block ${breakClass}">
+                    <div class="matrix-chunk-header">
+                        <h4>${cat.name} ${isMultiChunk ? `<span style="font-size:11px; font-weight:700; color:#475569;">(Part ${chunkIdx + 1} of ${totalChunks}: Items ${startNum}–${endNum})</span>` : ''}</h4>
+                        ${isMultiChunk ? `<span class="matrix-chunk-badge">Page ${chunkIdx + 1}/${totalChunks}</span>` : ''}
+                    </div>
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th class="participant-name-cell">Participant Identity</th>
+                                ${chunkItems.map(item => `
+                                    <th class="matrix-header-cell">
+                                        <div class="matrix-header-text-container">
+                                            ${item.name}
+                                        </div>
+                                    </th>
+                                `).join('')}
+                                ${isLastChunk ? `<th style="width: 40px; font-weight: 800;">Total</th>` : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${catParticipants.map(p => {
+                                const isExternalCat = p.categoryId !== cat.id;
+                                const extCatName = isExternalCat ? (state.categories || []).find(c => c.id === p.categoryId)?.name : null;
+                                const catBadge = extCatName ? `<span style="font-size: 8px; font-weight: 700; opacity: 0.7; margin-left: 4px; color: #6366f1;">(${extCatName})</span>` : '';
+                                const overallCount = catItems.filter(item => (p.itemIds || []).includes(item.id)).length;
+                                return `
+                                    <tr>
+                                        <td class="participant-name-cell">${p.chestNumber} - ${p.name}${catBadge}</td>
+                                        ${chunkItems.map(item => `
+                                            <td>${(p.itemIds || []).includes(item.id) && showEnrollmentMarks ? '<span class="check-mark">&#10003;</span>' : ''}</td>
+                                        `).join('')}
+                                        ${isLastChunk ? `<td style="font-weight: 800; color: ${overallCount > 0 ? 'var(--secondary)' : '#aaa'};">${overallCount}</td>` : ''}
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
     });
     setReportContent({ title: 'Checklist Matrix', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
@@ -1379,12 +1405,18 @@ const ReportsPage: React.FC = () => {
         }
         @media print {
             .matrix-scroll-wrapper { overflow: visible !important; border: none; }
-            .team-matrix-container { page-break-inside: avoid; }
-            .zone-matrix-section { page-break-inside: avoid; }
+            .team-matrix-container { page-break-inside: auto !important; }
+            .zone-matrix-section { page-break-inside: auto !important; break-inside: auto !important; }
+            .matrix-page-break { page-break-before: always !important; break-before: page !important; margin-top: 15px !important; }
+            .page-break-before-always { page-break-before: always !important; break-before: page !important; }
+            .team-matrix-table { width: 100% !important; page-break-inside: auto !important; table-layout: fixed !important; }
+            .team-matrix-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
             .team-nav-anchors { display: none !important; }
         }
       </style>
     `;
+
+    const MAX_ITEMS_PER_CHUNK = 13;
 
     const renderZoneTableHTML = (
       zoneName: string,
@@ -1417,7 +1449,7 @@ const ReportsPage: React.FC = () => {
         `;
       }
 
-      // Precompute item enrolled counts
+      // Precompute item enrolled counts for all items
       const itemEnrolledCounts: Record<string, number> = {};
       zoneItems.forEach(item => {
         let count = 0;
@@ -1427,86 +1459,107 @@ const ReportsPage: React.FC = () => {
         itemEnrolledCounts[item.id] = count;
       });
 
-      return `
-        <div class="zone-matrix-section">
-            <div class="zone-header-strip ${zoneBadgeClass}">
-                <span class="zone-title-text">${zoneName} Checklist Matrix</span>
-                <span class="zone-meta-text">${zoneItems.length} Items &nbsp;•&nbsp; ${zoneParticipants.length} Delegates ${isGZone ? '(Combined Tier)' : ''}</span>
-            </div>
-            <div class="matrix-scroll-wrapper">
-                <table class="team-matrix-table">
-                    <thead>
-                        <tr>
-                            <th class="part-id-cell" style="background: #f8fafc;">
-                                Participant Identity (Chest No & Name)
-                            </th>
-                            ${zoneItems.map(item => `
-                                <th class="team-matrix-header-cell" title="${item.name} (${item.type} - ${item.performanceType})">
-                                    <div class="team-matrix-header-text">
-                                        ${item.code ? `<span style="opacity: 0.6; font-size: 8px;">#${item.code} </span>` : ''}
-                                        <span>${item.name}</span>
-                                        <span style="opacity: 0.6; font-size: 8px; margin-top: 2px;">(${item.type === ItemType.GROUP ? 'G' : 'S'})</span>
-                                    </div>
-                                </th>
-                            `).join('')}
-                            <th class="total-badge-col" style="vertical-align: middle; padding: 4px;">
-                                Total
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${zoneParticipants.map(p => {
-                            const enrolledCount = zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length;
-                            let tierPill = '';
-                            if (isGZone) {
-                                const isSubTier = subCatIds.has(p.categoryId);
-                                const isHighTier = highCatIds.has(p.categoryId);
-                                if (isSubTier) tierPill = '<span class="tier-pill tier-sub">Sub</span>';
-                                else if (isHighTier) tierPill = '<span class="tier-pill tier-high">High</span>';
-                                else tierPill = '<span class="tier-pill tier-general">G-Zone</span>';
-                            }
+      const totalChunks = Math.ceil(zoneItems.length / MAX_ITEMS_PER_CHUNK);
+      let zoneHtml = '';
 
-                            return `
-                                <tr>
-                                    <td class="part-id-cell">
-                                        <span style="font-weight: 800; color: var(--primary); margin-right: 4px;">${p.chestNumber || '-'}</span>
-                                        <span style="color: var(--text-primary); font-weight: 700;">${p.name}</span>
-                                        ${tierPill}
-                                    </td>
-                                    ${zoneItems.map(item => {
-                                        const isEnrolled = (p.itemIds || []).includes(item.id);
-                                        return `
-                                            <td>
-                                                ${isEnrolled 
-                                                    ? (showEnrollmentMarks ? '<span class="check-mark">&#10004;</span>' : '<span class="empty-box"></span>') 
-                                                    : ''}
-                                            </td>
-                                        `;
-                                    }).join('')}
-                                    <td class="total-badge-col" style="font-weight: 800; color: ${enrolledCount > 0 ? 'var(--secondary)' : '#aaa'};">
-                                        ${enrolledCount}
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                    <tfoot>
-                        <tr class="summary-row">
-                            <td class="part-id-cell" style="font-weight: 800; text-transform: uppercase;">
-                                Team Enrolled Total
-                            </td>
-                            ${zoneItems.map(item => `
-                                <td>${itemEnrolledCounts[item.id] || 0}</td>
-                            `).join('')}
-                            <td class="total-badge-col" style="color: var(--primary);">
-                                ${zoneParticipants.reduce((sum, p) => sum + zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length, 0)}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-      `;
+      for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+        const chunkItems = zoneItems.slice(chunkIdx * MAX_ITEMS_PER_CHUNK, (chunkIdx + 1) * MAX_ITEMS_PER_CHUNK);
+        const startNum = chunkIdx * MAX_ITEMS_PER_CHUNK + 1;
+        const endNum = Math.min((chunkIdx + 1) * MAX_ITEMS_PER_CHUNK, zoneItems.length);
+        const isMultiPart = totalChunks > 1;
+        const isLastChunk = chunkIdx === totalChunks - 1;
+        const partLabel = isMultiPart ? ` (Part ${chunkIdx + 1} of ${totalChunks}: Items ${startNum}–${endNum})` : '';
+        const breakClass = chunkIdx > 0 ? 'page-break-before-always matrix-page-break' : '';
+
+        zoneHtml += `
+          <div class="zone-matrix-section ${breakClass}">
+              <div class="zone-header-strip ${zoneBadgeClass}">
+                  <span class="zone-title-text">${zoneName} Checklist Matrix${partLabel}</span>
+                  <span class="zone-meta-text">${isMultiPart ? `Items ${startNum}–${endNum} of ${zoneItems.length}` : `${zoneItems.length} Items`} &nbsp;•&nbsp; ${zoneParticipants.length} Delegates ${isGZone ? '(Combined Tier)' : ''}</span>
+              </div>
+              <div class="matrix-scroll-wrapper">
+                  <table class="team-matrix-table">
+                      <thead>
+                          <tr>
+                              <th class="part-id-cell" style="background: #f8fafc; width: 190px;">
+                                  Participant Identity (Chest No & Name)
+                              </th>
+                              ${chunkItems.map(item => `
+                                  <th class="team-matrix-header-cell" title="${item.name} (${item.type} - ${item.performanceType})">
+                                      <div class="team-matrix-header-text">
+                                          ${item.code ? `<span style="opacity: 0.6; font-size: 8px;">#${item.code} </span>` : ''}
+                                          <span>${item.name}</span>
+                                          <span style="opacity: 0.6; font-size: 8px; margin-top: 2px;">(${item.type === ItemType.GROUP ? 'G' : 'S'})</span>
+                                      </div>
+                                  </th>
+                              `).join('')}
+                              ${isLastChunk ? `
+                                <th class="total-badge-col" style="vertical-align: middle; padding: 4px; width: 44px;">
+                                    Total
+                                </th>
+                              ` : ''}
+                          </tr>
+                      </thead>
+                      <tbody>
+                          ${zoneParticipants.map(p => {
+                              const overallEnrolledCount = zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length;
+                              let tierPill = '';
+                              if (isGZone) {
+                                  const isSubTier = subCatIds.has(p.categoryId);
+                                  const isHighTier = highCatIds.has(p.categoryId);
+                                  if (isSubTier) tierPill = '<span class="tier-pill tier-sub">Sub</span>';
+                                  else if (isHighTier) tierPill = '<span class="tier-pill tier-high">High</span>';
+                                  else tierPill = '<span class="tier-pill tier-general">G-Zone</span>';
+                              }
+
+                              return `
+                                  <tr>
+                                      <td class="part-id-cell">
+                                          <span style="font-weight: 800; color: var(--primary); margin-right: 4px;">${p.chestNumber || '-'}</span>
+                                          <span style="color: var(--text-primary); font-weight: 700;">${p.name}</span>
+                                          ${tierPill}
+                                      </td>
+                                      ${chunkItems.map(item => {
+                                          const isEnrolled = (p.itemIds || []).includes(item.id);
+                                          return `
+                                              <td>
+                                                  ${isEnrolled 
+                                                      ? (showEnrollmentMarks ? '<span class="check-mark">&#10004;</span>' : '<span class="empty-box"></span>') 
+                                                      : ''}
+                                              </td>
+                                          `;
+                                      }).join('')}
+                                      ${isLastChunk ? `
+                                        <td class="total-badge-col" style="font-weight: 800; color: ${overallEnrolledCount > 0 ? 'var(--secondary)' : '#aaa'};">
+                                            ${overallEnrolledCount}
+                                        </td>
+                                      ` : ''}
+                                  </tr>
+                              `;
+                          }).join('')}
+                      </tbody>
+                      <tfoot>
+                          <tr class="summary-row">
+                              <td class="part-id-cell" style="font-weight: 800; text-transform: uppercase;">
+                                  Team Enrolled Total
+                              </td>
+                              ${chunkItems.map(item => `
+                                  <td>${itemEnrolledCounts[item.id] || 0}</td>
+                              `).join('')}
+                              ${isLastChunk ? `
+                                <td class="total-badge-col" style="color: var(--primary);">
+                                    ${zoneParticipants.reduce((sum, p) => sum + zoneItems.filter(i => (p.itemIds || []).includes(i.id)).length, 0)}
+                                </td>
+                              ` : ''}
+                          </tr>
+                      </tfoot>
+                  </table>
+              </div>
+          </div>
+        `;
+      }
+
+      return zoneHtml;
     };
 
     let html = `${getStyles()}${matrixReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Team Checklist Matrix - Sub, High & G Zones')}`;
