@@ -28,6 +28,39 @@ const ReportsPage: React.FC = () => {
   const getTeamName = (id: string) => state?.teams.find(t => t.id === id)?.name || 'N/A';
   const getCategoryName = (id: string) => state?.categories.find(c => c.id === id)?.name || 'N/A';
   
+  const parseTimeToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 9 * 60;
+    const clean = timeStr.trim().toUpperCase();
+    const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match12) {
+      let hours = parseInt(match12[1], 10);
+      const minutes = parseInt(match12[2], 10);
+      const period = match12[3].toUpperCase();
+      if (period === 'PM' && hours < 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+      return hours * 60 + minutes;
+    }
+    const match24 = clean.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24) {
+      const hours = parseInt(match24[1], 10);
+      const minutes = parseInt(match24[2], 10);
+      return hours * 60 + minutes;
+    }
+    return 9 * 60;
+  };
+
+  const formatMinutesToTime = (totalMinutes: number): string => {
+    const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+    let hours = Math.floor(normalized / 60);
+    const minutes = normalized % 60;
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    const strHours = hours < 10 ? `0${hours}` : `${hours}`;
+    const strMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    return `${strHours}:${strMinutes} ${period}`;
+  };
+
   // --- Memoized Filtered Data ---
 
   const filteredTeams = useMemo(() => {
@@ -100,18 +133,32 @@ const ReportsPage: React.FC = () => {
       const categoryFilter = globalFilters?.categoryId || [];
       const itemFilter = globalFilters?.itemId || [];
       const perfFilter = globalFilters?.performanceType || [];
+      const stageFilter = globalFilters?.stage || [];
+      const dateFilter = globalFilters?.date || [];
 
-      return (state.schedule || []).filter(event => {
+      const list = (state.schedule || []).filter(event => {
           const item = (state.items || []).find(i => i.id === event.itemId);
           const category = (state.categories || []).find(c => c.id === event.categoryId);
           if (!item) return false;
 
+          if (dateFilter.length > 0 && !dateFilter.includes(event.date)) return false;
+          if (stageFilter.length > 0 && !stageFilter.includes(event.stage)) return false;
           if (categoryFilter.length > 0 && !categoryFilter.includes(category?.id || '')) return false;
           if (perfFilter.length > 0 && !perfFilter.includes(item?.performanceType || '')) return false;
           if (itemTypeFilter.length > 0 && !itemTypeFilter.some(t => t.toLowerCase() === (item?.type || '').toLowerCase())) return false;
           if (itemFilter.length > 0 && !itemFilter.includes(item.id)) return false;
           return true;
       });
+
+      const days = state.settings.eventDays || [];
+      list.sort((a, b) => {
+          const dIdxA = days.indexOf(a.date);
+          const dIdxB = days.indexOf(b.date);
+          if (dIdxA !== dIdxB) return (dIdxA === -1 ? 999 : dIdxA) - (dIdxB === -1 ? 999 : dIdxB);
+          return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+      });
+
+      return list;
   }, [state, globalFilters]);
 
   const filteredResults = useMemo(() => {
@@ -245,7 +292,16 @@ const ReportsPage: React.FC = () => {
       }).filter(Boolean);
       
       const wrapperClass = (paginated && index > 0) ? 'report-block profile-wrapper page-break-before-always' : 'report-block profile-wrapper';
-      html += ` <div class="${wrapperClass}"> <div class="profile-header"> <div class="profile-name">${p.name}</div> <div class="profile-chest">Chest No: ${p.chestNumber}</div> </div> <div class="profile-details"> <div><strong>Team:</strong> ${team}</div> <div><strong>Category:</strong> ${category}</div> </div> ${participantScheduledItems.length > 0 ? ` <h4>Registered Items</h4> <table> <thead><tr><th>Item</th><th>Type</th><th>Date</th><th>Time</th></tr></thead> <tbody> ${participantScheduledItems.map((si: any) => ` <tr> <td>${si.item?.name}</td> <td>${si.item?.type}</td> <td>${si.schedule?.date || '-'}</td> <td>${si.schedule?.time || '-'}</td> </tr> `).join('')} </tbody> </table> ` : '<p>No items registered.</p>'} </div> `;
+      html += ` <div class="${wrapperClass}"> <div class="profile-header"> <div class="profile-name">${p.name}</div> <div class="profile-chest">Chest No: ${p.chestNumber}</div> </div> <div class="profile-details"> <div><strong>Team:</strong> ${team}</div> <div><strong>Category:</strong> ${category}</div> </div> ${participantScheduledItems.length > 0 ? ` <h4>Registered Items</h4> <table> <thead><tr><th>Item</th><th>Type</th><th>Date</th><th>Timing & Duration</th><th>Stage</th></tr></thead> <tbody> ${participantScheduledItems.map((si: any) => {
+          const duration = (si.item?.duration && Number(si.item.duration) > 0) ? Number(si.item.duration) : 30;
+          let timeDisplay = '-';
+          if (si.schedule?.time) {
+            const startMins = parseTimeToMinutes(si.schedule.time);
+            const endMins = startMins + duration;
+            timeDisplay = `${si.schedule.time} – ${formatMinutesToTime(endMins)} (${duration}m)`;
+          }
+          return ` <tr> <td><strong>${si.item?.name}</strong></td> <td>${si.item?.performanceType || si.item?.type || '-'}</td> <td>${si.schedule?.date || '-'}</td> <td>${timeDisplay}</td> <td>${si.schedule?.stage || '-'}</td> </tr> `;
+      }).join('')} </tbody> </table> ` : '<p>No items registered.</p>'} </div> `;
     });
     setReportContent({ title: 'Participant Profiles', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
@@ -637,16 +693,106 @@ const ReportsPage: React.FC = () => {
 
   const generateScheduleReport = () => {
     if (!state) return;
-    let html = `${getStyles()}${getWatermarkHTML()}${getBrandingHeaderHTML('Official Schedule')}<h3>Event Timeline</h3>`;
-    if (filteredSchedule.length === 0) html += `<p>No scheduled events match current filters.</p>`;
-    else {
-        html += ` <table> <thead><tr><th>Date</th><th>Time</th><th>Item</th><th>Category</th><th>Stage</th></tr></thead> <tbody> ${filteredSchedule.map(ev => {
+
+    const scheduleReportStyles = `
+      <style>
+        .schedule-stat-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .schedule-stat-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 11px; }
+        .schedule-stat-card strong { color: var(--primary); font-size: 14px; display: block; }
+        .badge-type { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+        .badge-onstage { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .badge-offstage { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .time-badge { font-weight: 800; color: #1e293b; font-size: 12px; }
+        .time-end { font-size: 10px; color: #64748b; font-weight: 600; }
+        .duration-pill { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 12px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+      </style>
+    `;
+
+    let html = `${getStyles()}${scheduleReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Official Event Schedule')}`;
+    html += `<h3>Festival Programme Timeline</h3>`;
+
+    if (filteredSchedule.length === 0) {
+      html += `<p class="text-center" style="padding: 50px; opacity: 0.5;">No scheduled events match current filters.</p>`;
+    } else {
+        const totalDurationMins = filteredSchedule.reduce((sum, ev) => {
+            const item = state.items.find(i => i.id === ev.itemId);
+            return sum + ((item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30);
+        }, 0);
+
+        const uniqueDays = Array.from(new Set(filteredSchedule.map(s => s.date))).length;
+        const uniqueStages = Array.from(new Set(filteredSchedule.map(s => s.stage))).length;
+
+        html += `
+          <div class="schedule-stat-grid">
+            <div class="schedule-stat-card">
+              <span>Total Scheduled Items</span>
+              <strong>${filteredSchedule.length} Programmes</strong>
+            </div>
+            <div class="schedule-stat-card">
+              <span>Festival Days</span>
+              <strong>${uniqueDays} Days</strong>
+            </div>
+            <div class="schedule-stat-card">
+              <span>Performance Stages</span>
+              <strong>${uniqueStages} Venues</strong>
+            </div>
+            <div class="schedule-stat-card">
+              <span>Total Stage Runtime</span>
+              <strong>${Math.floor(totalDurationMins / 60)}h ${totalDurationMins % 60}m</strong>
+            </div>
+          </div>
+
+          <table style="width: 100%;">
+            <thead>
+              <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 12%;">Date / Day</th>
+                <th style="width: 22%;">Programme Timing</th>
+                <th style="width: 10%;">Duration</th>
+                <th style="width: 23%;">Item Name</th>
+                <th style="width: 13%;">Category / Zone</th>
+                <th style="width: 15%;">Stage / Venue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredSchedule.map((ev, index) => {
                   const item = state.items.find(i => i.id === ev.itemId);
                   const category = state.categories.find(c => c.id === ev.categoryId);
-                  return `<tr><td>${ev.date}</td><td>${ev.time}</td><td style="font-weight:bold">${item?.name || '-'}</td><td>${category?.name || '-'}</td><td>${ev.stage}</td></tr>`;
-              }).join('')} </tbody> </table> `;
+                  const duration = (item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30;
+                  const startMinutes = parseTimeToMinutes(ev.time);
+                  const endMinutes = startMinutes + duration;
+                  const endTimeStr = formatMinutesToTime(endMinutes);
+                  const isOnStage = item?.performanceType === PerformanceType.ON_STAGE;
+
+                  return `
+                    <tr>
+                      <td style="text-align: center; opacity: 0.6; font-size: 10px; font-weight: bold;">${index + 1}</td>
+                      <td style="font-weight: 700;">${ev.date}</td>
+                      <td>
+                        <div class="time-badge">${ev.time}</div>
+                        <div class="time-end">to ${endTimeStr}</div>
+                      </td>
+                      <td>
+                        <span class="duration-pill">⏱ ${duration} min</span>
+                      </td>
+                      <td>
+                        <div style="font-weight: 800; font-size: 13px; color: var(--primary);">${item?.code ? `[${item.code}] ` : ''}${item?.name || '-'}</div>
+                        <div style="margin-top: 2px;">
+                          <span class="badge-type ${isOnStage ? 'badge-onstage' : 'badge-offstage'}">
+                            ${isOnStage ? '🎤 On Stage' : '📝 Off Stage'}
+                          </span>
+                        </div>
+                      </td>
+                      <td style="font-weight: 600; font-size: 11px;">${category?.name || '-'}</td>
+                      <td style="font-weight: 700; color: #0284c7;">${ev.stage}</td>
+                    </tr>
+                  `;
+              }).join('')}
+            </tbody>
+          </table>
+        `;
     }
-    setReportContent({ title: 'Event Schedule', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
+    setReportContent({ title: 'Event Schedule & Timetable Report', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
 
   const generateTeamsAndParticipantsReport = (paginated: boolean) => {
