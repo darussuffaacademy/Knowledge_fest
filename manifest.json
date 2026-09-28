@@ -1,44 +1,59 @@
 {
+  "id": "/",
   "short_name": "Amazio 2026",
   "name": "Amazio Knowledge Fest 2026",
   "description": "Official management terminal for the Amazio Knowledge Fest 2026 Edition.",
-  "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "/icons/pwa-192x192.png",
-      "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/pwa-512x512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
-  ],
-  "start_url": ".",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "theme_color": "#C21D2E",
   "background_color": "#F7F3F0",
+  "categories": ["education", "events", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Data Entry",
       "short_name": "Data Entry",
       "description": "Enter new participant data",
-      "url": "/#Data Entry",
+      "url": "/#Data%20Entry",
       "icons": [{ "src": "/icons/shortcut-data-entry.png", "sizes": "192x192" }]
     },
     {
       "name": "Scoring & Results",
       "short_name": "Scoring",
       "description": "Enter scores and declare results",
-      "url": "/#Scoring & Results",
+      "url": "/#Scoring%20&%20Results",
       "icons": [{ "src": "/icons/shortcut-scoring.png", "sizes": "192x192" }]
     },
     {

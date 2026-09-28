@@ -22,9 +22,18 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+      .then(async cache => {
+        console.log('Opened cache:', CACHE_NAME);
+        // Safely cache each asset without aborting the entire installation if one fails
+        await Promise.allSettled(
+          urlsToCache.map(url =>
+            fetch(url, { mode: 'cors' })
+              .then(res => {
+                if (res.ok) return cache.put(url, res);
+              })
+              .catch(err => console.warn('PWA caching skip for:', url, err))
+          )
+        );
       })
   );
 });

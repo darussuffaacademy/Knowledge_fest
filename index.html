@@ -98,6 +98,29 @@
         .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       }
     </style>
+    <!-- Service Worker Registration for PWA -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+            .then(function(registration) {
+              console.log('PWA ServiceWorker registered with scope:', registration.scope);
+            })
+            .catch(function(err) {
+              console.warn('PWA ServiceWorker registration failed:', err);
+            });
+        });
+      }
+
+      // Capture install prompt event for Chrome/Android
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        // Prevent default browser mini-infobar on older versions
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-installable'));
+      });
+    </script>
   </head>
   <body class="bg-amazio-light-bg dark:bg-amazio-bg text-zinc-900 dark:text-zinc-100 transition-colors duration-500">
     <div id="root"></div>

@@ -5,6 +5,7 @@ import { User, UserRole } from '../types';
 import { useFirebase } from '../hooks/useFirebase';
 import { PAGES_WITH_GLOBAL_FILTERS, TABS, TAB_DISPLAY_NAMES } from '../constants';
 import UniversalFilter from './UniversalFilter';
+import InstallPwaButton from './InstallPwaButton';
 
 interface HeaderProps {
     pageTitle: string;
@@ -215,6 +216,8 @@ const Header: React.FC<HeaderProps> = ({ pageTitle, onMenuClick, handleLogout, c
                             )}
 
                             {showGlobalFilters && <UniversalFilter pageTitle={pageTitle} />}
+
+                            <InstallPwaButton />
 
                             <div className="relative" ref={themeRef}>
                                 <button 

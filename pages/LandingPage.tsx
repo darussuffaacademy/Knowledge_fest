@@ -9,6 +9,7 @@ import {
 import { useFirebase } from '../hooks/useFirebase';
 import { Settings } from '../types';
 import { TABS } from '../constants';
+import InstallPwaButton from '../components/InstallPwaButton';
 
 // Added missing LandingPageProps interface
 interface LandingPageProps {
@@ -145,6 +146,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
                     </div>
                     
                     <div className="flex items-center gap-4">
+                        <InstallPwaButton className="hidden sm:flex" />
                         <button 
                             onClick={cycleTheme}
                             className="p-3 rounded-full hover:bg-[#C21D2E]/5 dark:hover:bg-white/5 text-[#12A89D] dark:text-zinc-400 transition-all"
@@ -212,6 +214,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ theme, toggleTheme, settings 
 
                     {(showLiveDashboardBtn || showLiveProjectorBtn || showCreativeStudioBtn) && (
                         <div className="flex flex-wrap justify-center gap-4 mt-16 animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-500">
+                            <InstallPwaButton variant="hero" />
                             {showLiveDashboardBtn && (
                                 <button 
                                     onClick={() => navigateTo(TABS.DASHBOARD)} 
