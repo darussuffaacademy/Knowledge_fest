@@ -1,4 +1,4 @@
-const CACHE_NAME = 'art-fest-manager-v3';
+const CACHE_NAME = 'art-fest-manager-v4';
 const urlsToCache = [
   '/',
   '/index.html',
