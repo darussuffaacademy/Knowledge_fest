@@ -1,23 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone, Check, X, MoreVertical, Share2, PlusSquare } from 'lucide-react';
+import { Download, Smartphone, Check, X, MoreVertical, Share2, PlusSquare, Sparkles } from 'lucide-react';
 
 interface InstallPwaButtonProps {
   className?: string;
   variant?: 'header' | 'hero' | 'sidebar';
+  isCollapsed?: boolean;
 }
 
-const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', variant = 'header' }) => {
+const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ 
+  className = '', 
+  variant = 'header',
+  isCollapsed = false 
+}) => {
   const [canInstall, setCanInstall] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Detect standalone mode (already installed app)
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true;
-    setIsInstalled(isStandalone);
+    // 1. Detect if currently running in standalone / installed PWA mode
+    const checkIsInstalled = () => {
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.includes('android-app://');
+
+      if (isStandalone || localStorage.getItem('amazio_pwa_installed') === 'true') {
+        setIsInstalled(true);
+        return true;
+      }
+      return false;
+    };
+
+    if (checkIsInstalled()) {
+      return;
+    }
 
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(isIOSDevice);
@@ -30,20 +49,25 @@ const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', var
       setCanInstall(true);
     }
 
-    window.addEventListener('pwa-installable', handleInstallable);
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       setIsInstalled(true);
       setCanInstall(false);
+      localStorage.setItem('amazio_pwa_installed', 'true');
       (window as any).deferredPrompt = null;
       setShowModal(false);
-    });
+    };
+
+    window.addEventListener('pwa-installable', handleInstallable);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('pwa-installable', handleInstallable);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  const handleInstallClick = async () => {
+  const handleInstallClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     const promptEvent = (window as any).deferredPrompt;
     if (promptEvent) {
       try {
@@ -51,6 +75,7 @@ const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', var
         const { outcome } = await promptEvent.userChoice;
         if (outcome === 'accepted') {
           setIsInstalled(true);
+          localStorage.setItem('amazio_pwa_installed', 'true');
         }
         (window as any).deferredPrompt = null;
         setCanInstall(false);
@@ -60,11 +85,14 @@ const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', var
       }
     }
 
-    // If native prompt is not yet ready or iOS Safari
+    // Fallback: Show guided modal for mobile browsers & Safari
     setShowModal(true);
   };
 
-  if (isInstalled) return null;
+  // If already installed, hide the button completely!
+  if (isInstalled) {
+    return null;
+  }
 
   return (
     <>
@@ -78,13 +106,42 @@ const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', var
           <span>Install App</span>
         </button>
       ) : variant === 'sidebar' ? (
-        <button
-          onClick={handleInstallClick}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider text-[#C21D2E] dark:text-[#F9B344] bg-red-50 dark:bg-white/5 border border-[#C21D2E]/20 hover:bg-red-100 dark:hover:bg-white/10 transition-all ${className}`}
-        >
-          <img src="/icons/pwa-192x192.png" alt="App Icon" className="w-5 h-5 rounded-md shadow-sm" />
-          <span>Install Mobile App</span>
-        </button>
+        isCollapsed ? (
+          <div className="relative group w-full flex justify-center">
+            <button
+              onClick={handleInstallClick}
+              className={`p-2 rounded-2xl bg-gradient-to-tr from-[#C21D2E]/10 to-[#F9B344]/10 hover:from-[#C21D2E]/20 hover:to-[#F9B344]/20 text-[#C21D2E] dark:text-[#F9B344] border border-[#C21D2E]/20 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center ${className}`}
+              title="Install Amazio Web App"
+            >
+              <img src="/icons/pwa-192x192.png" alt="Install App" className="w-6 h-6 rounded-lg shadow-sm" />
+            </button>
+            <div className="absolute left-full ml-4 px-3 py-1.5 bg-zinc-900 text-white text-[10px] font-black uppercase tracking-wider rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-[1000] shadow-2xl">
+              Install App
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={handleInstallClick}
+            className={`w-full group flex items-center gap-3 p-2.5 rounded-2xl bg-gradient-to-r from-[#C21D2E]/10 via-[#F9B344]/10 to-[#C21D2E]/5 hover:from-[#C21D2E]/20 hover:to-[#F9B344]/20 border border-[#C21D2E]/20 dark:border-white/10 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-sm ${className}`}
+            title="Install Amazio App to your phone or computer"
+          >
+            <div className="relative shrink-0">
+              <img src="/icons/pwa-192x192.png" alt="App Icon" className="w-8 h-8 rounded-xl shadow-md border border-[#F9B344]/40 transition-transform group-hover:scale-105" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+                <Download size={9} strokeWidth={3} />
+              </div>
+            </div>
+            <div className="text-left min-w-0 flex-grow">
+              <p className="text-[11px] font-black uppercase tracking-wider text-[#C21D2E] dark:text-[#F9B344] leading-tight truncate">
+                Install App
+              </p>
+              <p className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mt-0.5 truncate">
+                Add to Home Screen
+              </p>
+            </div>
+            <Sparkles size={14} className="text-[#F9B344] shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          </button>
+        )
       ) : (
         <button
           onClick={handleInstallClick}
@@ -98,7 +155,7 @@ const InstallPwaButton: React.FC<InstallPwaButtonProps> = ({ className = '', var
 
       {/* Instructional Modal for Mobile Browsers */}
       {showModal && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-sm rounded-3xl bg-white dark:bg-[#151816] border border-[#C21D2E]/20 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100">
             <button
               onClick={() => setShowModal(false)}

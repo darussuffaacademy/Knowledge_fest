@@ -8,6 +8,7 @@ import {
     Medal, Home, Monitor, Search, Pin, PinOff
 } from 'lucide-react';
 import { useFirebase } from '../hooks/useFirebase';
+import InstallPwaButton from './InstallPwaButton';
 
 interface SidebarProps {
   activeTab: string;
@@ -216,6 +217,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                 );
              })}
         </nav>
+
+        {/* Dedicated PWA Install Button (automatically hides when already installed) */}
+        <div className={`transition-all duration-300 ${isExpanded && !isStickyMode ? 'px-4 mb-2' : 'px-2 mb-2 flex justify-center'}`}>
+            <InstallPwaButton variant="sidebar" isCollapsed={isNavCollapsed} />
+        </div>
 
         {/* User Identity Section */}
         <div className={`mt-auto transition-all duration-500 ${isExpanded && !isStickyMode ? 'p-4 mb-2' : 'p-2 mb-4'}`}>
