@@ -1,4 +1,4 @@
-const CACHE_NAME = 'art-fest-manager-v4';
+const CACHE_NAME = 'art-fest-manager-v5';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -6,16 +6,17 @@ const urlsToCache = [
   '/icon.svg',
   '/icons/pwa-192x192.png',
   '/icons/pwa-512x512.png',
+  '/icons/pwa-maskable-192x192.png',
+  '/icons/pwa-maskable-512x512.png',
   '/icons/apple-touch-icon-180x180.png',
+  '/icons/apple-touch-icon.png',
   '/icons/shortcut-data-entry.png',
   '/icons/shortcut-scoring.png',
   '/icons/shortcut-schedule.png',
   'https://cdn.tailwindcss.com',
   "https://aistudiocdn.com/react@^19.2.0",
   "https://aistudiocdn.com/react-dom@^19.2.0",
-  "https://aistudiocdn.com/lucide-react@^0.548.0",
-  "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-  "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+  "https://aistudiocdn.com/lucide-react@^0.548.0"
 ];
 
 self.addEventListener('install', event => {
@@ -24,7 +25,6 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(async cache => {
         console.log('Opened cache:', CACHE_NAME);
-        // Safely cache each asset without aborting the entire installation if one fails
         await Promise.allSettled(
           urlsToCache.map(url =>
             fetch(url, { mode: 'cors' })
@@ -39,7 +39,6 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
     return;
   }
@@ -48,36 +47,31 @@ self.addEventListener('fetch', event => {
     caches.match(event.request)
       .then(response => {
         if (response) {
-          return response; // Cache hit
+          return response;
         }
-        
-        // If not in cache, fetch from network
-        return fetch(event.request).then(
-          response => {
-            // Check if we received a valid response
-            if (!response || response.status !== 200) {
-              return response;
+
+        const fetchRequest = event.request.clone();
+
+        return fetch(fetchRequest).then(
+          networkResponse => {
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+              return networkResponse;
             }
 
-            // IMPORTANT: Clone the response. A response is a stream
-            // and because we want the browser to consume the response
-            // as well as the cache consuming the response, we need
-            // to clone it so we have two streams.
-            const responseToCache = response.clone();
-            
-            // Only cache responses from our app or trusted CDNs to avoid caching opaque responses
-            if(event.request.url.startsWith(self.location.origin) || event.request.url.includes('aistudiocdn.com') || event.request.url.includes('gstatic.com') || event.request.url.includes('tailwindcss.com')) {
-               caches.open(CACHE_NAME)
-                .then(cache => {
-                  cache.put(event.request, responseToCache);
-                });
-            }
+            const responseToCache = networkResponse.clone();
 
-            return response;
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+
+            return networkResponse;
           }
-        ).catch(error => {
-            console.log('Fetch failed; returning offline page instead.', error);
-            // Optionally, return a fallback offline page, e.g., return caches.match('/offline.html');
+        ).catch(() => {
+          // If offline and requesting navigation, return index.html
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
         });
       })
   );
@@ -90,11 +84,11 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheWhitelist.indexOf(cacheName) === -1) {
-            console.log('Deleting old cache:', cacheName);
+            console.log('Deleting obsolete cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });

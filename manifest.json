@@ -34,11 +34,6 @@
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
-    },
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
     }
   ],
   "shortcuts": [
@@ -47,21 +42,21 @@
       "short_name": "Data Entry",
       "description": "Enter new participant data",
       "url": "/#Data%20Entry",
-      "icons": [{ "src": "/icons/shortcut-data-entry.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/shortcut-data-entry.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Scoring & Results",
       "short_name": "Scoring",
       "description": "Enter scores and declare results",
       "url": "/#Scoring%20&%20Results",
-      "icons": [{ "src": "/icons/shortcut-scoring.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/shortcut-scoring.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Schedule",
       "short_name": "Schedule",
       "description": "View the event schedule",
       "url": "/#Schedule",
-      "icons": [{ "src": "/icons/shortcut-schedule.png", "sizes": "192x192" }]
+      "icons": [{ "src": "/icons/shortcut-schedule.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

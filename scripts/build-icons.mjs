@@ -1,3 +1,10 @@
+import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
+
+// 1. High-fidelity Vector SVG for standard & maskable icons
+// Safe zone: All important visual elements are within center 80% circle (radius ~195 in 512x512)
+const svgFullBleed = `
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <!-- Background Gradient -->
@@ -86,3 +93,88 @@
   <rect x="224" y="322" width="64" height="18" rx="9" fill="#C21D2E" stroke="url(#goldGrad)" stroke-width="1.5" />
   <text x="256" y="335" text-anchor="middle" font-family="'Arial Black', sans-serif" font-weight="900" font-size="11" fill="#FFFFFF" letter-spacing="2">2026</text>
 </svg>
+`;
+
+async function generateAssets() {
+  console.log('Generating high-resolution PWA and Android Launcher icons with sharp...');
+
+  const dirs = [
+    './public',
+    './public/icons',
+    './icons',
+    '.'
+  ];
+  for (const d of dirs) {
+    if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  }
+
+  // Save SVG
+  fs.writeFileSync('./public/icon.svg', svgFullBleed.trim());
+  fs.writeFileSync('./icon.svg', svgFullBleed.trim());
+
+  const svgBuffer = Buffer.from(svgFullBleed);
+
+  // Generate 512x512 base PNG
+  const png512 = await sharp(svgBuffer)
+    .resize(512, 512)
+    .png({ quality: 100, compressionLevel: 9 })
+    .toBuffer();
+
+  // Generate 192x192 base PNG
+  const png192 = await sharp(svgBuffer)
+    .resize(192, 192)
+    .png({ quality: 100, compressionLevel: 9 })
+    .toBuffer();
+
+  // Generate 180x180 Apple Touch PNG
+  const png180 = await sharp(svgBuffer)
+    .resize(180, 180)
+    .png({ quality: 100, compressionLevel: 9 })
+    .toBuffer();
+
+  // Write all standard and maskable icons into all standard paths
+  const targets = [
+    // public/icons
+    { path: './public/icons/pwa-512x512.png', buf: png512 },
+    { path: './public/icons/pwa-maskable-512x512.png', buf: png512 },
+    { path: './public/icons/pwa-192x192.png', buf: png192 },
+    { path: './public/icons/pwa-maskable-192x192.png', buf: png192 },
+    { path: './public/icons/apple-touch-icon-180x180.png', buf: png180 },
+    { path: './public/icons/apple-touch-icon.png', buf: png180 },
+    { path: './public/icons/shortcut-data-entry.png', buf: png192 },
+    { path: './public/icons/shortcut-scoring.png', buf: png192 },
+    { path: './public/icons/shortcut-schedule.png', buf: png192 },
+
+    // public root (direct fallback access)
+    { path: './public/pwa-512x512.png', buf: png512 },
+    { path: './public/pwa-maskable-512x512.png', buf: png512 },
+    { path: './public/pwa-192x192.png', buf: png192 },
+    { path: './public/pwa-maskable-192x192.png', buf: png192 },
+    { path: './public/apple-touch-icon.png', buf: png180 },
+    { path: './public/favicon.png', buf: png192 },
+
+    // repository root icons/
+    { path: './icons/pwa-512x512.png', buf: png512 },
+    { path: './icons/pwa-maskable-512x512.png', buf: png512 },
+    { path: './icons/pwa-192x192.png', buf: png192 },
+    { path: './icons/pwa-maskable-192x192.png', buf: png192 },
+    { path: './icons/apple-touch-icon-180x180.png', buf: png180 },
+    { path: './icons/apple-touch-icon.png', buf: png180 },
+
+    // repository root
+    { path: './apple-touch-icon.png', buf: png180 },
+    { path: './favicon.png', buf: png192 }
+  ];
+
+  for (const t of targets) {
+    fs.writeFileSync(t.path, t.buf);
+    console.log(`Created: ${t.path} (${t.buf.length} bytes)`);
+  }
+
+  console.log('All icons successfully created with sharp!');
+}
+
+generateAssets().catch(err => {
+  console.error('Icon generation failed:', err);
+  process.exit(1);
+});
