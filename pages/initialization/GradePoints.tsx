@@ -358,6 +358,48 @@ const LotMachine: React.FC = () => {
         }, 3000);
     };
 
+    const hasExistingCodes = useMemo(() => {
+        if (!state || !selectedItemId) return false;
+        return (state.tabulation || []).some(t => t.itemId === selectedItemId && t.codeLetter);
+    }, [state, selectedItemId]);
+
+    const handleClearCurrentItemCodes = async () => {
+        if (!state || !selectedItemId) return;
+        const currentItem = availableItems.find(i => i.id === selectedItemId);
+        const itemName = currentItem?.name || 'this item';
+        if (!confirm(`Clear all assigned codes for "${itemName}"? This will remove existing codes so you can spin lots fresh.`)) return;
+        const updates = (state.tabulation || [])
+            .filter(t => t.itemId === selectedItemId && t.codeLetter)
+            .map(t => ({ ...t, codeLetter: '' }));
+        if (updates.length > 0) {
+            await updateMultipleTabulationEntries(updates);
+        }
+        setLotResults([]);
+        setSelectedParticipantIds(new Set());
+    };
+
+    const handleSelectAllParticipants = () => {
+        if (selectedParticipantIds.size === participants.length) {
+            setSelectedParticipantIds(new Set());
+            setLotResults([]);
+            return;
+        }
+        const allIds = new Set(participants.map(p => p.id));
+        setSelectedParticipantIds(allIds);
+        if (state) {
+            const count = allIds.size;
+            const allRegCodes = [...(state.codeLetters || [])].sort((a,b) => (a.code || '').localeCompare(b.code || '')).map(c => c.code);
+            const nextPool = allRegCodes.slice(0, count);
+            const newResults = participants.map((part: any, idx) => ({
+                participantId: part.id,
+                name: part.displayName || part.name,
+                code: nextPool[idx] || '?',
+                isLocked: false
+            }));
+            setLotResults(newResults);
+        }
+    };
+
     return (
         <div className="bg-white/80 dark:bg-white/[0.02] backdrop-blur-xl rounded-3xl md:rounded-[3rem] border border-amazio-primary/5 dark:border-white/5 p-5 md:p-10 shadow-glass-light dark:shadow-2xl relative overflow-hidden min-h-[500px]">
             {/* SUCCESS OVERLAY */}
@@ -407,6 +449,31 @@ const LotMachine: React.FC = () => {
                                 </select>
                                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={16} />
                             </div>
+
+                            {selectedItemId && (
+                                <div className="flex items-center justify-between gap-2 px-1">
+                                    {participants.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={handleSelectAllParticipants}
+                                            className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 hover:underline"
+                                        >
+                                            {selectedParticipantIds.size === participants.length ? 'Deselect All' : `Select All (${participants.length})`}
+                                        </button>
+                                    )}
+                                    {hasExistingCodes && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearCurrentItemCodes}
+                                            className="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-600 flex items-center gap-1 hover:underline ml-auto"
+                                            title="Clear already assigned codes for this item"
+                                        >
+                                            <RotateCcw size={11} /> Clear Item Codes
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="flex-grow bg-zinc-50/30 dark:bg-black/20 border border-zinc-100 dark:border-white/5 rounded-[2rem] p-2 space-y-2 custom-scrollbar max-h-[300px] overflow-y-auto">
                                 {participants.map(p => (
                                     <div key={p.id} onClick={() => assignmentStatus !== 'success' && toggleParticipant(p)} className={`flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all border-2 ${selectedParticipantIds.has(p.id) ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-white/5 hover:border-zinc-200'} ${assignmentStatus === 'success' ? 'opacity-50' : ''}`}>
@@ -555,16 +622,60 @@ const BulkCodeAssigner: React.FC = () => {
         setSelectedItemIds(new Set());
     };
 
+    const handleSelectAllFilteredItems = () => {
+        if (selectedItemIds.size === filteredItems.length) {
+            setSelectedItemIds(new Set());
+        } else {
+            setSelectedItemIds(new Set(filteredItems.map(i => i.id)));
+        }
+    };
+
+    const handleClearAllFestivalCodes = async () => {
+        if (!state) return;
+        const totalAssigned = (state.tabulation || []).filter(t => t.codeLetter);
+        if (totalAssigned.length === 0) {
+            alert("No codes are currently assigned in the database.");
+            return;
+        }
+        if (!confirm(`Warning: Are you sure you want to clear all assigned codes across ALL ${totalAssigned.length} participant entries in the entire festival? This will reset all codes.`)) {
+            return;
+        }
+        const updates = totalAssigned.map(t => ({ ...t, codeLetter: '' }));
+        await updateMultipleTabulationEntries(updates);
+        setSelectedItemIds(new Set());
+    };
+
     return (
         <div className="bg-white/80 dark:bg-white/[0.02] backdrop-blur-xl rounded-[3rem] border border-amazio-primary/5 dark:border-white/5 p-8 shadow-glass-light dark:shadow-2xl relative flex flex-col h-full overflow-hidden">
-            <div className="flex justify-between items-start mb-6">
-                <SectionTitle title="Direct Mapping" icon={LayoutList} color="indigo" />
-                {hasAnyConflicts && (
-                    <div className="flex items-center gap-2 px-3 py-1 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-full border border-rose-100 dark:border-rose-900/30 animate-pulse">
-                        <AlertTriangle size={12} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Duplicate Codes Detected</span>
-                    </div>
-                )}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <SectionTitle title="Direct Mapping" icon={LayoutList} color="indigo" />
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {hasAnyConflicts && (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-full border border-rose-100 dark:border-rose-900/30 animate-pulse">
+                            <AlertTriangle size={12} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Duplicate Codes Detected</span>
+                        </div>
+                    )}
+                    {filteredItems.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={handleSelectAllFilteredItems}
+                            className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-white/10 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all"
+                        >
+                            {selectedItemIds.size === filteredItems.length ? 'Deselect All' : `Select All (${filteredItems.length})`}
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={handleClearAllFestivalCodes}
+                        className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all flex items-center gap-1"
+                        title="Clear all assigned codes across the entire database"
+                    >
+                        <Trash2 size={12} /> Clear All Codes
+                    </button>
+                </div>
             </div>
             
             <div className="flex flex-col gap-6 flex-grow overflow-hidden h-full">
@@ -717,6 +828,19 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
         onClose();
     };
 
+    const handleClearAllForItem = async () => {
+        if (!state || !item) return;
+        if (!confirm(`Clear all assigned codes for "${item.name}"?`)) return;
+        const updates = (state.tabulation || [])
+            .filter(t => t.itemId === itemId && t.codeLetter)
+            .map(t => ({ ...t, codeLetter: '' }));
+        if (updates.length > 0) {
+            await updateMultipleTabulationEntries(updates);
+        }
+        setDraftEntries({});
+        onClose();
+    };
+
     if (!item) return null;
 
     return ReactDOM.createPortal(
@@ -761,9 +885,18 @@ const ManualCodeEditorModal: React.FC<{ itemId: string; onClose: () => void }> =
                         );
                     })}
                 </div>
-                <div className="p-7 border-t border-white/5 bg-zinc-50 dark:bg-white/[0.02] flex justify-end gap-4">
-                    <button onClick={onClose} className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Discard</button>
-                    <button onClick={handleSave} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-amazio-primary/20 active:scale-95 transition-all">Save Changes</button>
+                <div className="p-7 border-t border-white/5 bg-zinc-50 dark:bg-white/[0.02] flex items-center justify-between gap-4">
+                    <button 
+                        type="button" 
+                        onClick={handleClearAllForItem} 
+                        className="px-5 py-3 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all flex items-center gap-1.5"
+                    >
+                        <Trash2 size={13} /> Clear Codes
+                    </button>
+                    <div className="flex items-center gap-3">
+                        <button onClick={onClose} className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">Discard</button>
+                        <button onClick={handleSave} className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-amazio-primary/20 active:scale-95 transition-all">Save Changes</button>
+                    </div>
                 </div>
             </div>
         </div>, document.body

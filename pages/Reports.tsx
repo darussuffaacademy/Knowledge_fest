@@ -24,6 +24,7 @@ const ReportsPage: React.FC = () => {
   // Initialize from global settings if available
   const [showPrintHeader, setShowPrintHeader] = useState(state?.settings.reportSettings?.defaultShowHeader !== false);
   const [showPrintFooter, setShowPrintFooter] = useState(state?.settings.reportSettings?.defaultShowFooter !== false);
+  const [customDateInput, setCustomDateInput] = useState('');
   
   const getTeamName = (id: string) => state?.teams.find(t => t.id === id)?.name || 'N/A';
   const getCategoryName = (id: string) => state?.categories.find(c => c.id === id)?.name || 'N/A';
@@ -160,6 +161,42 @@ const ReportsPage: React.FC = () => {
 
       return list;
   }, [state, globalFilters]);
+
+  const scheduledDatesWithCounts = useMemo(() => {
+      if (!state) return [];
+      const counts: Record<string, number> = {};
+      
+      // 1. Collect from all events in state.schedule
+      (state.schedule || []).forEach(ev => {
+          if (ev.date && ev.date.trim()) {
+              const d = ev.date.trim();
+              counts[d] = (counts[d] || 0) + 1;
+          }
+      });
+
+      // 2. Also ensure every date configured in Settings -> eventDays appears
+      (state.settings?.eventDays || []).forEach(d => {
+          if (d && d.trim() && counts[d.trim()] === undefined) {
+              counts[d.trim()] = 0;
+          }
+      });
+
+      // 3. Ensure at least 03/10 appears if no dates found
+      if (Object.keys(counts).length === 0) {
+          counts['03/10'] = 0;
+      }
+
+      const days = state.settings?.eventDays || [];
+      const allDates = Object.keys(counts);
+      return allDates.sort((a, b) => {
+          const dIdxA = days.indexOf(a);
+          const dIdxB = days.indexOf(b);
+          if (dIdxA !== -1 && dIdxB !== -1) return dIdxA - dIdxB;
+          if (dIdxA !== -1) return -1;
+          if (dIdxB !== -1) return 1;
+          return a.localeCompare(b, undefined, { numeric: true });
+      }).map(date => ({ date, count: counts[date] }));
+  }, [state]);
 
   const filteredResults = useMemo(() => {
       if (!state) return [];
@@ -691,54 +728,189 @@ const ReportsPage: React.FC = () => {
     setReportContent({ title: 'Prize Holders - Comprehensive Report', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
   };
 
-  const generateScheduleReport = () => {
+  const generateScheduleReport = (selectedDate?: string) => {
     if (!state) return;
+
+    const eventsToProcess = selectedDate
+      ? (state.schedule || []).filter(ev => {
+          if (!ev.date) return false;
+          const cleanDate = ev.date.trim().toLowerCase();
+          const cleanTarget = selectedDate.trim().toLowerCase();
+          return cleanDate === cleanTarget || cleanDate.includes(cleanTarget);
+        })
+      : filteredSchedule;
 
     const scheduleReportStyles = `
       <style>
-        .schedule-stat-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-        .schedule-stat-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 11px; }
-        .schedule-stat-card strong { color: var(--primary); font-size: 14px; display: block; }
+        .daily-stat-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .daily-stat-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 11px; flex: 1; min-width: 140px; }
+        .daily-stat-card span { color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; }
+        .daily-stat-card strong { color: var(--primary); font-size: 16px; display: block; margin-top: 2px; font-weight: 900; }
         .badge-type { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
         .badge-onstage { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
         .badge-offstage { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-        .time-badge { font-weight: 800; color: #1e293b; font-size: 12px; }
-        .time-end { font-size: 10px; color: #64748b; font-weight: 600; }
-        .duration-pill { display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 2px 6px; border-radius: 12px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+        .badge-group { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .badge-single { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+        .time-badge { font-weight: 900; color: #0f172a; font-size: 13px; font-family: monospace; }
+        .time-end { font-size: 10px; color: #64748b; font-weight: 700; }
+        .duration-pill { display: inline-block; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; padding: 2px 7px; border-radius: 12px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+        .stage-pill { display: inline-block; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+        .day-section-banner {
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          border-left: 6px solid var(--primary);
+          border-top: 1px solid var(--border);
+          border-right: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 12px 18px;
+          margin-top: 25px;
+          margin-bottom: 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .day-title-text { font-family: 'Roboto Slab', serif; font-size: 16px; font-weight: 900; color: var(--primary); text-transform: uppercase; margin: 0; }
+        .day-nav-anchors {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          justify-content: center;
+          margin-bottom: 25px;
+          padding: 10px 14px;
+          background: #f8fafc;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+        }
+        .day-nav-btn {
+          display: inline-block;
+          padding: 5px 12px;
+          border-radius: 6px;
+          background: #fff;
+          border: 1px solid var(--border);
+          font-size: 11px;
+          font-weight: 800;
+          color: var(--primary);
+          text-transform: uppercase;
+          text-decoration: none;
+          transition: all 0.2s ease;
+        }
+        .day-nav-btn:hover {
+          background: var(--primary);
+          color: #fff;
+        }
       </style>
     `;
 
-    let html = `${getStyles()}${scheduleReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML('Official Event Schedule')}`;
-    html += `<h3>Festival Programme Timeline</h3>`;
+    const reportMainTitle = selectedDate
+      ? `Scheduled Programmes - ${selectedDate}`
+      : 'Official Festival Programme Schedule (Day-wise)';
 
-    if (filteredSchedule.length === 0) {
-      html += `<p class="text-center" style="padding: 50px; opacity: 0.5;">No scheduled events match current filters.</p>`;
-    } else {
-        const totalDurationMins = filteredSchedule.reduce((sum, ev) => {
-            const item = state.items.find(i => i.id === ev.itemId);
-            return sum + ((item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30);
-        }, 0);
+    let html = `${getStyles()}${scheduleReportStyles}${getWatermarkHTML()}${getBrandingHeaderHTML(reportMainTitle)}`;
 
-        const uniqueDays = Array.from(new Set(filteredSchedule.map(s => s.date))).length;
-        const uniqueStages = Array.from(new Set(filteredSchedule.map(s => s.stage))).length;
+    if (eventsToProcess.length === 0) {
+      html += `<p class="text-center" style="padding: 50px; opacity: 0.5;">No scheduled programmes found matching current filters${selectedDate ? ` for date ${selectedDate}` : ''}.</p>`;
+      setReportContent({
+        title: reportMainTitle,
+        content: html,
+        isSearchable: true,
+        hideHeader: !showPrintHeader,
+        hideFooter: !showPrintFooter
+      });
+      return;
+    }
 
-        html += `
-          <div class="schedule-stat-grid">
-            <div class="schedule-stat-card">
-              <span>Total Scheduled Items</span>
-              <strong>${filteredSchedule.length} Programmes</strong>
+    // Group events by date
+    const eventsByDate: Record<string, ScheduledEvent[]> = {};
+    eventsToProcess.forEach(ev => {
+      const d = ev.date || 'Unscheduled Date';
+      if (!eventsByDate[d]) eventsByDate[d] = [];
+      eventsByDate[d].push(ev);
+    });
+
+    const daysOrder = state.settings.eventDays || [];
+    const sortedDateKeys = Object.keys(eventsByDate).sort((a, b) => {
+      const dIdxA = daysOrder.indexOf(a);
+      const dIdxB = daysOrder.indexOf(b);
+      if (dIdxA !== -1 && dIdxB !== -1) return dIdxA - dIdxB;
+      if (dIdxA !== -1) return -1;
+      if (dIdxB !== -1) return 1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+
+    // Total Festival runtime & stats
+    const totalDurationMins = eventsToProcess.reduce((sum, ev) => {
+      const item = state.items.find(i => i.id === ev.itemId);
+      return sum + ((item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30);
+    }, 0);
+    const uniqueStages = Array.from(new Set(eventsToProcess.map(s => s.stage))).length;
+
+    html += `
+      <div class="daily-stat-grid">
+        <div class="daily-stat-card">
+          <span>Scheduled Items</span>
+          <strong>${eventsToProcess.length} Programmes</strong>
+        </div>
+        <div class="daily-stat-card">
+          <span>Scheduled Days</span>
+          <strong>${sortedDateKeys.length} ${sortedDateKeys.length === 1 ? 'Day' : 'Days'}</strong>
+        </div>
+        <div class="daily-stat-card">
+          <span>Active Venues / Stages</span>
+          <strong>${uniqueStages} Stages</strong>
+        </div>
+        <div class="daily-stat-card">
+          <span>Total Stage Runtime</span>
+          <strong>${Math.floor(totalDurationMins / 60)}h ${totalDurationMins % 60}m</strong>
+        </div>
+      </div>
+    `;
+
+    // Jump-to-date links if more than 1 date is displayed
+    if (sortedDateKeys.length > 1) {
+      html += `
+        <div class="day-nav-anchors">
+          <span style="font-size: 10px; font-weight: 800; color: #64748b; margin-right: 4px; text-transform: uppercase;">Jump to Day:</span>
+          ${sortedDateKeys.map(date => {
+            const anchorId = `day-${date.replace(/[^a-zA-Z0-9]/g, '-')}`;
+            return `<a href="#${anchorId}" class="day-nav-btn">📅 ${date} (${eventsByDate[date].length})</a>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // Render table for each day
+    sortedDateKeys.forEach((date, dateIdx) => {
+      const dayEvents = eventsByDate[date].sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
+      const dayTotalMins = dayEvents.reduce((sum, ev) => {
+        const item = state.items.find(i => i.id === ev.itemId);
+        return sum + ((item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30);
+      }, 0);
+
+      const dayStages = Array.from(new Set(dayEvents.map(e => e.stage)));
+      const firstTime = dayEvents[0]?.time || '';
+      const lastEv = dayEvents[dayEvents.length - 1];
+      const lastDuration = ((state.items.find(i => i.id === lastEv?.itemId)?.duration) || 30);
+      const lastTimeFormatted = lastEv ? formatMinutesToTime(parseTimeToMinutes(lastEv.time) + lastDuration) : '';
+      const anchorId = `day-${date.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+      const breakClass = (isPaginated && dateIdx > 0) ? 'report-block page-break-before-always' : 'report-block';
+
+      html += `
+        <div class="${breakClass}" id="${anchorId}" style="margin-bottom: 2.5rem;">
+          <div class="day-section-banner">
+            <div>
+              <h3 class="day-title-text">📅 Programme Schedule: ${date}</h3>
+              <div style="font-size: 11px; color: #475569; font-weight: 600; margin-top: 3px;">
+                Timing Span: <strong>${firstTime}</strong> to <strong>${lastTimeFormatted}</strong> &nbsp;|&nbsp; 
+                Total Runtime: <strong>${Math.floor(dayTotalMins / 60)}h ${dayTotalMins % 60}m</strong>
+              </div>
             </div>
-            <div class="schedule-stat-card">
-              <span>Festival Days</span>
-              <strong>${uniqueDays} Days</strong>
-            </div>
-            <div class="schedule-stat-card">
-              <span>Performance Stages</span>
-              <strong>${uniqueStages} Venues</strong>
-            </div>
-            <div class="schedule-stat-card">
-              <span>Total Stage Runtime</span>
-              <strong>${Math.floor(totalDurationMins / 60)}h ${totalDurationMins % 60}m</strong>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <span class="daily-pill" style="color: var(--primary); font-weight: 800;">${dayEvents.length} Programmes</span>
+              <span class="daily-pill">${dayStages.length} Venues (${dayStages.join(', ')})</span>
             </div>
           </div>
 
@@ -746,53 +918,81 @@ const ReportsPage: React.FC = () => {
             <thead>
               <tr>
                 <th style="width: 5%;">#</th>
-                <th style="width: 12%;">Date / Day</th>
-                <th style="width: 22%;">Programme Timing</th>
-                <th style="width: 10%;">Duration</th>
-                <th style="width: 23%;">Item Name</th>
-                <th style="width: 13%;">Category / Zone</th>
-                <th style="width: 15%;">Stage / Venue</th>
+                <th style="width: 18%;">Time & Duration</th>
+                <th style="width: 27%;">Programme / Item</th>
+                <th style="width: 15%;">Category</th>
+                <th style="width: 18%;">Stage / Venue</th>
+                <th style="width: 17%; text-align: center;">Enrolled Entries</th>
               </tr>
             </thead>
             <tbody>
-              ${filteredSchedule.map((ev, index) => {
-                  const item = state.items.find(i => i.id === ev.itemId);
-                  const category = state.categories.find(c => c.id === ev.categoryId);
-                  const duration = (item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30;
-                  const startMinutes = parseTimeToMinutes(ev.time);
-                  const endMinutes = startMinutes + duration;
-                  const endTimeStr = formatMinutesToTime(endMinutes);
-                  const isOnStage = item?.performanceType === PerformanceType.ON_STAGE;
+              ${dayEvents.map((ev, evIdx) => {
+                const item = state.items.find(i => i.id === ev.itemId);
+                const category = state.categories.find(c => c.id === ev.categoryId);
+                const duration = (item?.duration && Number(item.duration) > 0) ? Number(item.duration) : 30;
+                const startMins = parseTimeToMinutes(ev.time);
+                const endMins = startMins + duration;
+                const endTimeStr = formatMinutesToTime(endMins);
+                const isOnStage = item?.performanceType === PerformanceType.ON_STAGE;
+                const isGroup = item?.type === ItemType.GROUP;
 
-                  return `
-                    <tr>
-                      <td style="text-align: center; opacity: 0.6; font-size: 10px; font-weight: bold;">${index + 1}</td>
-                      <td style="font-weight: 700;">${ev.date}</td>
-                      <td>
-                        <div class="time-badge">${ev.time}</div>
-                        <div class="time-end">to ${endTimeStr}</div>
-                      </td>
-                      <td>
+                const enrolledParts = (state.participants || []).filter(p => (p.itemIds || []).includes(ev.itemId));
+                let entriesDisplay = `${enrolledParts.length} Participants`;
+                if (isGroup) {
+                  const uniqueTeams = new Set(enrolledParts.map(p => p.teamId)).size;
+                  entriesDisplay = `${uniqueTeams} Teams (${enrolledParts.length} Members)`;
+                }
+
+                return `
+                  <tr>
+                    <td style="text-align: center; opacity: 0.6; font-size: 10px; font-weight: bold;">${evIdx + 1}</td>
+                    <td>
+                      <div class="time-badge">${ev.time}</div>
+                      <div class="time-end">to ${endTimeStr}</div>
+                      <div style="margin-top: 3px;">
                         <span class="duration-pill">⏱ ${duration} min</span>
-                      </td>
-                      <td>
-                        <div style="font-weight: 800; font-size: 13px; color: var(--primary);">${item?.code ? `[${item.code}] ` : ''}${item?.name || '-'}</div>
-                        <div style="margin-top: 2px;">
-                          <span class="badge-type ${isOnStage ? 'badge-onstage' : 'badge-offstage'}">
-                            ${isOnStage ? '🎤 On Stage' : '📝 Off Stage'}
-                          </span>
-                        </div>
-                      </td>
-                      <td style="font-weight: 600; font-size: 11px;">${category?.name || '-'}</td>
-                      <td style="font-weight: 700; color: #0284c7;">${ev.stage}</td>
-                    </tr>
-                  `;
+                      </div>
+                    </td>
+                    <td>
+                      <div style="font-weight: 800; font-size: 13px; color: var(--primary);">
+                        ${item?.code ? `[${item.code}] ` : ''}${item?.name || 'Untitled Event'}
+                      </div>
+                      <div style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
+                        <span class="badge-type ${isOnStage ? 'badge-onstage' : 'badge-offstage'}">
+                          ${isOnStage ? '🎤 On Stage' : '📝 Off Stage'}
+                        </span>
+                        <span class="badge-type ${isGroup ? 'badge-group' : 'badge-single'}">
+                          ${isGroup ? '👥 Group' : '👤 Single'}
+                        </span>
+                      </div>
+                    </td>
+                    <td style="font-weight: 700; font-size: 12px; color: #334155;">
+                      ${category?.name || '-'}
+                    </td>
+                    <td>
+                      <span class="stage-pill">
+                        📍 ${ev.stage || 'Main Stage'}
+                      </span>
+                    </td>
+                    <td style="text-align: center; font-weight: 700; font-size: 11px; color: #475569;">
+                      ${entriesDisplay}
+                    </td>
+                  </tr>
+                `;
               }).join('')}
             </tbody>
           </table>
-        `;
-    }
-    setReportContent({ title: 'Event Schedule & Timetable Report', content: html, isSearchable: true, hideHeader: !showPrintHeader, hideFooter: !showPrintFooter });
+        </div>
+      `;
+    });
+
+    setReportContent({
+      title: reportMainTitle,
+      content: html,
+      isSearchable: true,
+      hideHeader: !showPrintHeader,
+      hideFooter: !showPrintFooter
+    });
   };
 
   const generateTeamsAndParticipantsReport = (paginated: boolean) => {
@@ -1747,7 +1947,121 @@ const ReportsPage: React.FC = () => {
              </div>
         </div>
 
+        {/* Prominent Day Schedule Banner (Instant Date Filter) */}
+        <div className="p-5 rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent border-2 border-amber-500/30 dark:border-amber-500/20 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-md shrink-0">
+                    <Calendar size={22} />
+                </div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black uppercase tracking-wider text-amazio-primary dark:text-zinc-100">
+                            Scheduled Programmes by Day
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase">
+                            Instant Filter
+                        </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Select any scheduled date below to generate the complete list with times, durations, and stage venues:
+                    </p>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <button
+                    onClick={() => generateScheduleReport()}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
+                >
+                    All Days
+                </button>
+                {scheduledDatesWithCounts.map(({ date, count }) => (
+                    <button
+                        key={date}
+                        onClick={() => generateScheduleReport(date)}
+                        className="px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-zinc-800 dark:text-zinc-100 border-2 border-amber-500/30 hover:border-amber-500 text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer flex items-center gap-2"
+                        title={`View programmes scheduled for ${date}`}
+                    >
+                        <span>📅 {date}</span>
+                        {count > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 text-[10px] font-black">
+                                {count}
+                            </span>
+                        )}
+                    </button>
+                ))}
+                
+                {/* Custom Date Quick Input */}
+                <div className="flex items-center gap-1.5 ml-auto md:ml-2">
+                    <input
+                        type="text"
+                        placeholder="e.g. 03/10"
+                        value={customDateInput}
+                        onChange={(e) => setCustomDateInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && customDateInput.trim()) {
+                                generateScheduleReport(customDateInput.trim());
+                            }
+                        }}
+                        className="w-24 px-2.5 py-1.5 text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <button
+                        onClick={() => {
+                            if (customDateInput.trim()) {
+                                generateScheduleReport(customDateInput.trim());
+                            }
+                        }}
+                        className="px-2.5 py-1.5 text-xs font-black uppercase rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white dark:bg-zinc-700 dark:hover:bg-zinc-600 transition-all cursor-pointer"
+                        title="View schedule for this custom date"
+                    >
+                        Go
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+             {/* 1. Daily Programme Schedule (Featured First Card) */}
+             <Card 
+                title="Daily Programme Schedule" 
+                action={
+                    <button 
+                        onClick={() => generateScheduleReport()} 
+                        className="text-amber-600 hover:text-amber-800 transition-colors"
+                        title="Generate Day-wise Scheduled Programmes"
+                    >
+                        <Calendar size={20}/>
+                    </button>
+                }
+             > 
+                {filteredSchedule.length > 0 && <CountBadge count={filteredSchedule.length} label="Items" />} 
+                <div className="p-4 flex flex-col justify-between h-full"> 
+                    <div className="text-center mb-3"> 
+                        <Calendar className="h-12 w-12 mx-auto text-amber-500 mb-2" /> 
+                        <p className="text-sm text-zinc-500">Day-by-day list of scheduled programmes, timings, and stage venues.</p> 
+                    </div> 
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex flex-wrap items-center justify-center gap-1.5">
+                        <button
+                            onClick={() => generateScheduleReport()}
+                            className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 transition-all active:scale-95 cursor-pointer"
+                            title="Generate schedule for all days separated"
+                        >
+                            All Days
+                        </button>
+                        {scheduledDatesWithCounts.map(({ date, count }) => (
+                            <button
+                                key={date}
+                                onClick={() => generateScheduleReport(date)}
+                                className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 truncate max-w-[130px] transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                                title={`View programmes scheduled specifically for ${date}`}
+                            >
+                                <span>📅 {date}</span>
+                                {count > 0 && <span className="opacity-60 text-[9px] font-black">({count})</span>}
+                            </button>
+                        ))}
+                    </div>
+                </div> 
+             </Card>
              <Card title="Teams & Participants" action={<button onClick={() => generateTeamsAndParticipantsReport(isPaginated)} className="text-indigo-600 hover:text-indigo-800" title="Generate Teams & Participants Directory"><Users size={20}/></button>}> 
                 {filteredTeams.length > 0 && <CountBadge count={filteredTeams.length} label="Teams" />} 
                 <div className="text-center p-4"> 
@@ -1808,7 +2122,6 @@ const ReportsPage: React.FC = () => {
              </Card>
              <Card title="Writing Template" action={<button onClick={() => generateTemplatePage(true)} className="text-indigo-600 hover:text-indigo-800"><File size={20}/></button>}> <div className="text-center p-4"> <File className="h-12 w-12 mx-auto text-slate-400 mb-2" /> <p className="text-sm text-zinc-500">Blank or lined pages with event watermark.</p> </div> </Card>
              <Card title="Program Manual" action={<button onClick={generateProgramManual} className="text-indigo-600 hover:text-indigo-800"><Book size={20}/></button>}> {filteredItems.length > 0 && <CountBadge count={filteredItems.length} />} <div className="text-center p-4"> <Book className="h-12 w-12 mx-auto text-orange-400 mb-2" /> <p className="text-sm text-zinc-500">Handbook with rules and details.</p> </div> </Card>
-             <Card title="Schedule" action={<button onClick={generateScheduleReport} className="text-indigo-600 hover:text-indigo-800"><Calendar size={20}/></button>}> {filteredSchedule.length > 0 && <CountBadge count={filteredSchedule.length} />} <div className="text-center p-4"> <Calendar className="h-12 w-12 mx-auto text-amber-400 mb-2" /> <p className="text-sm text-zinc-500">Detailed event schedule and timeline.</p> </div> </Card>
         </div>
         
         {isSettingsOpen && <CustomizationModal />}
